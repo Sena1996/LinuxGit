@@ -6,7 +6,7 @@ import {
   Search,
   Sparkles,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, getModKey } from '@/lib/utils';
 import { useUIStore } from '@/stores/ui';
 import { useRepoStore } from '@/stores/repo';
 
@@ -68,7 +68,7 @@ export function Header() {
         <Search size={14} />
         <span>Search or type a command...</span>
         <kbd className="ml-auto px-1.5 py-0.5 rounded bg-surface text-xs text-text-ghost">
-          ⌘K
+          {getModKey()}+K
         </kbd>
       </button>
 

@@ -139,6 +139,79 @@ pub fn get_commit_detail(sha: String, state: State<AppState>) -> Result<CommitIn
     git::get_commit_detail(&repo, &sha).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+pub fn cherry_pick_commit(sha: String, state: State<AppState>) -> Result<CommitInfo, String> {
+    let path_guard = state.repo_path.lock().unwrap();
+    let repo_path = path_guard
+        .as_ref()
+        .ok_or("No repository open")?;
+
+    let repo = git::open_repo(repo_path).map_err(|e| e.to_string())?;
+    git::cherry_pick_commit(&repo, &sha).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn revert_commit(sha: String, state: State<AppState>) -> Result<CommitInfo, String> {
+    let path_guard = state.repo_path.lock().unwrap();
+    let repo_path = path_guard
+        .as_ref()
+        .ok_or("No repository open")?;
+
+    let repo = git::open_repo(repo_path).map_err(|e| e.to_string())?;
+    git::revert_commit(&repo, &sha).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn reset_to_commit(sha: String, reset_type: String, state: State<AppState>) -> Result<(), String> {
+    let path_guard = state.repo_path.lock().unwrap();
+    let repo_path = path_guard
+        .as_ref()
+        .ok_or("No repository open")?;
+
+    let reset = match reset_type.as_str() {
+        "soft" => git::ResetType::Soft,
+        "mixed" => git::ResetType::Mixed,
+        "hard" => git::ResetType::Hard,
+        _ => return Err("Invalid reset type. Use 'soft', 'mixed', or 'hard'".to_string()),
+    };
+
+    let repo = git::open_repo(repo_path).map_err(|e| e.to_string())?;
+    git::reset_to_commit(&repo, &sha, reset).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn checkout_commit(sha: String, state: State<AppState>) -> Result<(), String> {
+    let path_guard = state.repo_path.lock().unwrap();
+    let repo_path = path_guard
+        .as_ref()
+        .ok_or("No repository open")?;
+
+    let repo = git::open_repo(repo_path).map_err(|e| e.to_string())?;
+    git::checkout_commit(&repo, &sha).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_tag(sha: String, tag_name: String, message: Option<String>, state: State<AppState>) -> Result<String, String> {
+    let path_guard = state.repo_path.lock().unwrap();
+    let repo_path = path_guard
+        .as_ref()
+        .ok_or("No repository open")?;
+
+    let repo = git::open_repo(repo_path).map_err(|e| e.to_string())?;
+    git::create_tag(&repo, &sha, &tag_name, message.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_commit_diff(sha: String, state: State<AppState>) -> Result<Vec<FileDiff>, String> {
+    let path_guard = state.repo_path.lock().unwrap();
+    let repo_path = path_guard
+        .as_ref()
+        .ok_or("No repository open")?;
+
+    let repo = git::open_repo(repo_path).map_err(|e| e.to_string())?;
+    git::get_commit_diff(&repo, &sha).map_err(|e| e.to_string())
+}
+
 // ============================================================================
 // Branch Commands
 // ============================================================================

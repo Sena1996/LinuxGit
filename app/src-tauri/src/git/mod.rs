@@ -6,7 +6,11 @@ pub mod diff;
 
 pub use repository::*;
 pub use status::*;
-pub use commit::*;
+pub use commit::{
+    create_commit, get_commit_history, get_commit_detail,
+    cherry_pick_commit, revert_commit, reset_to_commit, checkout_commit,
+    create_tag, get_commit_diff, ResetType,
+};
 pub use branch::*;
 pub use diff::*;
 

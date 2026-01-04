@@ -9,14 +9,46 @@ function App() {
   // Apply theme
   useEffect(() => {
     const root = document.documentElement;
+    const isDark = theme === 'system'
+      ? window.matchMedia('(prefers-color-scheme: dark)').matches
+      : theme === 'dark';
 
+    root.classList.toggle('dark', isDark);
+    root.classList.toggle('light', !isDark);
+
+    // Listen for system theme changes when in system mode
     if (theme === 'system') {
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      root.classList.toggle('light', !prefersDark);
-    } else {
-      root.classList.toggle('light', theme === 'light');
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const handleChange = (e: MediaQueryListEvent) => {
+        root.classList.toggle('dark', e.matches);
+        root.classList.toggle('light', !e.matches);
+      };
+      mediaQuery.addEventListener('change', handleChange);
+      return () => mediaQuery.removeEventListener('change', handleChange);
     }
   }, [theme]);
+
+  // Disable default browser context menu (Reload, Inspect, etc.)
+  // Custom context menus use data-context-menu attribute to opt-in
+  useEffect(() => {
+    const handleContextMenu = (e: MouseEvent) => {
+      // Check if target or parent has custom context menu handler
+      const target = e.target as HTMLElement;
+      const hasCustomMenu = target.closest('[data-context-menu]');
+
+      // Always prevent default browser menu
+      e.preventDefault();
+
+      // If no custom menu handler, the event just gets blocked
+      // Custom menus handle their own display via React state
+      if (!hasCustomMenu) {
+        e.stopPropagation();
+      }
+    };
+
+    document.addEventListener('contextmenu', handleContextMenu);
+    return () => document.removeEventListener('contextmenu', handleContextMenu);
+  }, []);
 
   // Global keyboard shortcuts
   useEffect(() => {

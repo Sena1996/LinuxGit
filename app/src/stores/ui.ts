@@ -33,18 +33,7 @@ export const useUIStore = create<UIState>()(
   persist(
     (set) => ({
       theme: 'dark',
-      setTheme: (theme) => {
-        set({ theme });
-        // Apply theme to document
-        if (theme === 'system') {
-          const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-          document.documentElement.classList.toggle('dark', isDark);
-          document.documentElement.classList.toggle('light', !isDark);
-        } else {
-          document.documentElement.classList.toggle('dark', theme === 'dark');
-          document.documentElement.classList.toggle('light', theme === 'light');
-        }
-      },
+      setTheme: (theme) => set({ theme }),
 
       currentView: 'changes',
       setView: (currentView) => set({ currentView }),

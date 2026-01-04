@@ -25,6 +25,12 @@ pub fn run() {
             create_commit,
             get_commits,
             get_commit_detail,
+            cherry_pick_commit,
+            revert_commit,
+            reset_to_commit,
+            checkout_commit,
+            create_tag,
+            get_commit_diff,
             // Branch commands
             get_branches,
             create_branch,

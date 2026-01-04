@@ -2,6 +2,16 @@ import { invoke } from '@tauri-apps/api/core';
 import { useState, useCallback } from 'react';
 import { useRepoStore } from '@/stores/repo';
 
+// Helper to safely extract error message
+function getErrorMessage(error: unknown): string {
+  if (typeof error === 'string') return error;
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object' && 'message' in error) {
+    return String((error as { message: unknown }).message);
+  }
+  return 'An unknown error occurred';
+}
+
 // Types matching the Rust backend
 export interface RepoInfo {
   path: string;
@@ -92,8 +102,9 @@ export function useRepository() {
       });
       return info;
     } catch (e) {
-      setError(e as string);
-      throw e;
+      const msg = getErrorMessage(e);
+      setError(msg);
+      throw new Error(msg);
     } finally {
       setLoading(false);
     }
@@ -113,8 +124,9 @@ export function useRepository() {
       });
       return info;
     } catch (e) {
-      setError(e as string);
-      throw e;
+      const msg = getErrorMessage(e);
+      setError(msg);
+      throw new Error(msg);
     } finally {
       setLoading(false);
     }
@@ -141,8 +153,9 @@ export function useStatus() {
       setStatus(status.staged, status.unstaged, status.untracked);
       return status;
     } catch (e) {
-      setError(e as string);
-      throw e;
+      const msg = getErrorMessage(e);
+      setError(msg);
+      throw new Error(msg);
     } finally {
       setLoading(false);
     }
@@ -200,8 +213,9 @@ export function useCommits() {
       })));
       return commits;
     } catch (e) {
-      setError(e as string);
-      throw e;
+      const msg = getErrorMessage(e);
+      setError(msg);
+      throw new Error(msg);
     } finally {
       setLoading(false);
     }
@@ -249,8 +263,9 @@ export function useBranches() {
       })));
       return branches;
     } catch (e) {
-      setError(e as string);
-      throw e;
+      const msg = getErrorMessage(e);
+      setError(msg);
+      throw new Error(msg);
     } finally {
       setLoading(false);
     }
@@ -310,8 +325,9 @@ export function useDiff() {
       setDiff(fileDiff);
       return fileDiff;
     } catch (e) {
-      setError(e as string);
-      throw e;
+      const msg = getErrorMessage(e);
+      setError(msg);
+      throw new Error(msg);
     } finally {
       setLoading(false);
     }
@@ -332,8 +348,9 @@ export function useAI() {
       const message = await invoke<string>('generate_commit_message');
       return message;
     } catch (e) {
-      setError(e as string);
-      throw e;
+      const msg = getErrorMessage(e);
+      setError(msg);
+      throw new Error(msg);
     } finally {
       setLoading(false);
     }

@@ -15,6 +15,7 @@ import {
   Plus,
 } from 'lucide-react';
 import { useUIStore } from '@/stores/ui';
+import { formatShortcut, getModKey } from '@/lib/utils';
 
 interface CommandItem {
   id: string;
@@ -201,7 +202,7 @@ export function CommandPalette() {
           >
             <Command className="glass-card overflow-hidden">
               <div className="flex items-center gap-2 px-4 py-3 border-b border-white/5">
-                <span className="text-accent-primary">⌘</span>
+                <span className="text-accent-primary">{getModKey()}</span>
                 <Command.Input
                   placeholder="Search commands..."
                   className="flex-1 bg-transparent text-text-primary placeholder:text-text-muted focus:outline-none"
@@ -236,7 +237,7 @@ export function CommandPalette() {
                           <span className="flex-1 text-sm">{command.label}</span>
                           {command.shortcut && (
                             <kbd className="px-1.5 py-0.5 rounded bg-surface text-xs text-text-ghost">
-                              {command.shortcut}
+                              {formatShortcut(command.shortcut)}
                             </kbd>
                           )}
                         </Command.Item>
