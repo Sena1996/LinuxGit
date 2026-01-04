@@ -188,7 +188,7 @@ pub fn merge_branch(repo: &Repository, name: &str) -> GitResult<()> {
         repo.merge(&[&annotated_commit], None, None)?;
 
         // Check for conflicts
-        let index = repo.index()?;
+        let mut index = repo.index()?;
         if index.has_conflicts() {
             return Err(GitError::MergeConflict);
         }

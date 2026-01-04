@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use git2::{DiffOptions, Repository};
 
 use super::{DiffHunk, DiffLine, DiffLineType, FileDiff, FileStatusType, GitResult};
@@ -17,7 +18,7 @@ pub fn get_file_diff(repo: &Repository, path: &str, staged: bool) -> GitResult<F
         repo.diff_index_to_workdir(None, Some(&mut diff_opts))?
     };
 
-    let mut file_diff = FileDiff {
+    let file_diff = RefCell::new(FileDiff {
         path: path.to_string(),
         old_path: None,
         status: FileStatusType::Modified,
@@ -25,61 +26,63 @@ pub fn get_file_diff(repo: &Repository, path: &str, staged: bool) -> GitResult<F
         is_binary: false,
         additions: 0,
         deletions: 0,
-    };
+    });
 
-    // Process the diff
-    diff.foreach(
-        &mut |delta, _| {
-            // File callback
-            file_diff.is_binary = delta.flags().is_binary();
+    // Process the diff using print which uses a single callback
+    diff.print(git2::DiffFormat::Patch, |delta, hunk, line| {
+        let mut fd = file_diff.borrow_mut();
 
-            file_diff.status = match delta.status() {
-                git2::Delta::Added | git2::Delta::Untracked => FileStatusType::Added,
-                git2::Delta::Deleted => FileStatusType::Deleted,
-                git2::Delta::Modified => FileStatusType::Modified,
-                git2::Delta::Renamed | git2::Delta::Copied => FileStatusType::Renamed,
-                _ => FileStatusType::Modified,
+        // Update file status from delta
+        fd.is_binary = delta.flags().is_binary();
+        fd.status = match delta.status() {
+            git2::Delta::Added | git2::Delta::Untracked => FileStatusType::Added,
+            git2::Delta::Deleted => FileStatusType::Deleted,
+            git2::Delta::Modified => FileStatusType::Modified,
+            git2::Delta::Renamed | git2::Delta::Copied => FileStatusType::Renamed,
+            _ => FileStatusType::Modified,
+        };
+
+        if let Some(old_file) = delta.old_file().path() {
+            if old_file.to_string_lossy() != path {
+                fd.old_path = Some(old_file.to_string_lossy().to_string());
+            }
+        }
+
+        // Handle hunk headers
+        if let Some(h) = hunk {
+            let hunk_header = String::from_utf8_lossy(h.header()).to_string();
+            // Only add hunk if it's a new one (check by header)
+            if fd.hunks.last().map(|last| &last.header) != Some(&hunk_header) {
+                fd.hunks.push(DiffHunk {
+                    header: hunk_header,
+                    old_start: h.old_start(),
+                    old_lines: h.old_lines(),
+                    new_start: h.new_start(),
+                    new_lines: h.new_lines(),
+                    lines: Vec::new(),
+                });
+            }
+        }
+
+        // Handle line content
+        let origin = line.origin();
+        if origin == '+' || origin == '-' || origin == ' ' {
+            let line_type = match origin {
+                '+' => {
+                    fd.additions += 1;
+                    DiffLineType::Addition
+                }
+                '-' => {
+                    fd.deletions += 1;
+                    DiffLineType::Deletion
+                }
+                ' ' => DiffLineType::Context,
+                _ => DiffLineType::Header,
             };
 
-            if let Some(old_file) = delta.old_file().path() {
-                if old_file.to_string_lossy() != path {
-                    file_diff.old_path = Some(old_file.to_string_lossy().to_string());
-                }
-            }
+            let content = String::from_utf8_lossy(line.content()).to_string();
 
-            true
-        },
-        None, // Binary callback
-        Some(&mut |_delta, hunk| {
-            // Hunk callback
-            file_diff.hunks.push(DiffHunk {
-                header: String::from_utf8_lossy(hunk.header()).to_string(),
-                old_start: hunk.old_start(),
-                old_lines: hunk.old_lines(),
-                new_start: hunk.new_start(),
-                new_lines: hunk.new_lines(),
-                lines: Vec::new(),
-            });
-            true
-        }),
-        Some(&mut |_delta, _hunk, line| {
-            // Line callback
-            if let Some(current_hunk) = file_diff.hunks.last_mut() {
-                let line_type = match line.origin() {
-                    '+' => {
-                        file_diff.additions += 1;
-                        DiffLineType::Addition
-                    }
-                    '-' => {
-                        file_diff.deletions += 1;
-                        DiffLineType::Deletion
-                    }
-                    ' ' => DiffLineType::Context,
-                    _ => DiffLineType::Header,
-                };
-
-                let content = String::from_utf8_lossy(line.content()).to_string();
-
+            if let Some(current_hunk) = fd.hunks.last_mut() {
                 current_hunk.lines.push(DiffLine {
                     line_type,
                     content,
@@ -87,11 +90,12 @@ pub fn get_file_diff(repo: &Repository, path: &str, staged: bool) -> GitResult<F
                     new_line: line.new_lineno(),
                 });
             }
-            true
-        }),
-    )?;
+        }
 
-    Ok(file_diff)
+        true
+    })?;
+
+    Ok(file_diff.into_inner())
 }
 
 /// Gets the full diff text for staged changes (for AI commit message generation)
@@ -128,9 +132,9 @@ pub fn get_staged_diff_stats(repo: &Repository) -> GitResult<(u32, u32, u32)> {
     let stats = diff.stats()?;
 
     Ok((
-        stats.files_changed(),
-        stats.insertions(),
-        stats.deletions(),
+        stats.files_changed() as u32,
+        stats.insertions() as u32,
+        stats.deletions() as u32,
     ))
 }
 

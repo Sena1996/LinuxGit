@@ -119,6 +119,7 @@ pub fn stage_files(repo: &Repository, paths: &[String]) -> GitResult<()> {
 pub fn unstage_files(repo: &Repository, paths: &[String]) -> GitResult<()> {
     let head = repo.head()?.peel_to_commit()?;
     let head_tree = head.tree()?;
+    let head_object = head.into_object();
 
     for path in paths {
         let path = std::path::Path::new(path);
@@ -126,7 +127,7 @@ pub fn unstage_files(repo: &Repository, paths: &[String]) -> GitResult<()> {
         // Check if file exists in HEAD
         if head_tree.get_path(path).is_ok() {
             // File exists in HEAD, reset to HEAD version
-            repo.reset_default(Some(&head.into_object()), [path])?;
+            repo.reset_default(Some(&head_object), [path])?;
         } else {
             // File doesn't exist in HEAD (new file), remove from index
             let mut index = repo.index()?;

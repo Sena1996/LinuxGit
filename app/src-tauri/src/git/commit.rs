@@ -1,5 +1,5 @@
-use chrono::{TimeZone, Utc};
-use git2::{Oid, Repository, Signature};
+use chrono::Utc;
+use git2::{Oid, Repository};
 
 use super::{CommitInfo, GitError, GitResult};
 
