@@ -16,7 +16,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useRepoStore, FileStatus } from '@/stores/repo';
 import { useUIStore } from '@/stores/ui';
-import { useAI, useStatus, useDiff, FileDiff } from '@/hooks/useGit';
+import { useAI, useStatus, useDiff, useCommits, FileDiff } from '@/hooks/useGit';
 
 // Diff Viewer Component
 function DiffViewer({ diff, loading }: { diff: FileDiff | null; loading: boolean }) {
@@ -268,6 +268,7 @@ export function ChangesView() {
   const { selectedFile, setSelectedFile } = useUIStore();
   const { generateCommitMessage, loading: aiLoading, error: _aiError } = useAI();
   const { refreshStatus, stageFiles, unstageFiles, discardChanges, loading: statusLoading } = useStatus();
+  const { createCommit, loading: commitLoading } = useCommits();
   const { diff, getFileDiff, loading: diffLoading } = useDiff();
   const [expandedSections, setExpandedSections] = useState({
     staged: true,
@@ -364,6 +365,19 @@ export function ChangesView() {
     }
   };
 
+  const handleCommit = async () => {
+    if (!commitMessage.trim() || stagedFiles.length === 0) return;
+
+    try {
+      await createCommit(commitMessage);
+      setCommitMessage('');
+      showNotification('Commit created successfully', 'success');
+      await refreshStatus();
+    } catch (e) {
+      showNotification(`Failed to commit: ${e}`, 'error');
+    }
+  };
+
   return (
     <div className="h-full flex">
       {/* Left Panel - File List */}
@@ -452,15 +466,23 @@ export function ChangesView() {
             </div>
 
             <button
-              disabled={stagedFiles.length === 0 || !commitMessage}
+              onClick={handleCommit}
+              disabled={stagedFiles.length === 0 || !commitMessage.trim() || commitLoading}
               className={cn(
                 'w-full py-2 rounded-lg font-medium text-sm transition-all duration-200',
-                stagedFiles.length > 0 && commitMessage
+                stagedFiles.length > 0 && commitMessage.trim()
                   ? 'bg-accent-primary text-void hover:shadow-glow-sm'
                   : 'bg-elevated text-text-muted cursor-not-allowed'
               )}
             >
-              Commit {stagedFiles.length > 0 && `(${stagedFiles.length} files)`}
+              {commitLoading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 size={14} className="animate-spin" />
+                  Committing...
+                </span>
+              ) : (
+                <>Commit {stagedFiles.length > 0 && `(${stagedFiles.length} files)`}</>
+              )}
             </button>
           </div>
         </div>
