@@ -71,11 +71,6 @@ export default {
         'glow-sm': '0 0 10px var(--accent-primary-glow)',
         'glow-md': '0 0 20px var(--accent-primary-glow)',
         'glow-lg': '0 0 40px var(--accent-primary-glow)',
-        'glass': 'inset 0 1px 0 rgba(255,255,255,0.1), 0 8px 32px rgba(0,0,0,0.3)',
-        'glass-hover': 'inset 0 1px 0 rgba(255,255,255,0.15), 0 12px 40px rgba(0,0,0,0.35)',
-      },
-      backdropBlur: {
-        glass: '20px',
       },
       animation: {
         'glow-pulse': 'glow-pulse 2s ease-in-out infinite',

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Command } from 'cmdk';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -13,9 +13,15 @@ import {
   Sparkles,
   FolderOpen,
   Plus,
+  Download,
 } from 'lucide-react';
+import { invoke } from '@tauri-apps/api/core';
+import { open } from '@tauri-apps/plugin-dialog';
 import { useUIStore } from '@/stores/ui';
+import { useRepoStore } from '@/stores/repo';
+import { useRepositoriesStore } from '@/stores/repositories';
 import { formatShortcut, getModKey } from '@/lib/utils';
+import { CloneDialog, CreateDialog } from '@/components/repository';
 
 interface CommandItem {
   id: string;
@@ -28,6 +34,52 @@ interface CommandItem {
 
 export function CommandPalette() {
   const { commandPaletteOpen, closeCommandPalette, setView } = useUIStore();
+  const { setRepo, setLoading, setError } = useRepoStore();
+  const { addRecentRepository } = useRepositoriesStore();
+  const [showCloneDialog, setShowCloneDialog] = useState(false);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+
+  const handleOpenRepository = async () => {
+    closeCommandPalette();
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: 'Select Repository',
+      });
+
+      if (selected) {
+        setLoading(true);
+        const repoInfo = await invoke<{
+          path: string;
+          name: string;
+          head_branch: string | null;
+          head_sha: string | null;
+          is_detached: boolean;
+        }>('open_repository', { path: selected });
+
+        const repo = {
+          path: repoInfo.path,
+          name: repoInfo.name,
+          currentBranch: repoInfo.head_branch || 'main',
+          headSha: repoInfo.head_sha || undefined,
+          isDetached: repoInfo.is_detached,
+        };
+
+        setRepo(repo);
+        addRecentRepository({
+          path: repo.path,
+          name: repo.name,
+          lastOpened: Date.now(),
+          currentBranch: repo.currentBranch,
+        });
+      }
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Close on Escape
   useEffect(() => {
@@ -159,8 +211,26 @@ export function CommandPalette() {
       icon: <FolderOpen size={16} />,
       shortcut: '⌘O',
       group: 'Repository',
+      action: handleOpenRepository,
+    },
+    {
+      id: 'clone-repo',
+      label: 'Clone repository...',
+      icon: <Download size={16} />,
+      group: 'Repository',
       action: () => {
         closeCommandPalette();
+        setShowCloneDialog(true);
+      },
+    },
+    {
+      id: 'create-repo',
+      label: 'Create new repository...',
+      icon: <Plus size={16} />,
+      group: 'Repository',
+      action: () => {
+        closeCommandPalette();
+        setShowCreateDialog(true);
       },
     },
 
@@ -189,18 +259,19 @@ export function CommandPalette() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={closeCommandPalette}
-            className="fixed inset-0 bg-void/60 backdrop-blur-sm z-50"
+            className="fixed inset-0 bg-void/80 z-50"
           />
 
           {/* Command Palette */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: -20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: -20 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             transition={{ duration: 0.15, ease: 'easeOut' }}
-            className="fixed top-[20%] left-1/2 -translate-x-1/2 w-full max-w-[560px] z-50"
+            className="fixed inset-0 flex items-start justify-center pt-16 z-50 pointer-events-none"
           >
-            <Command className="glass-card overflow-hidden">
+            <div className="w-full max-w-[560px] pointer-events-auto">
+            <Command className="modal-card overflow-hidden">
               <div className="flex items-center gap-2 px-4 py-3 border-b border-white/5">
                 <span className="text-accent-primary">{getModKey()}</span>
                 <Command.Input
@@ -246,8 +317,19 @@ export function CommandPalette() {
                 ))}
               </Command.List>
             </Command>
+            </div>
           </motion.div>
         </>
+      )}
+
+      {/* Clone Dialog */}
+      {showCloneDialog && (
+        <CloneDialog onClose={() => setShowCloneDialog(false)} />
+      )}
+
+      {/* Create Dialog */}
+      {showCreateDialog && (
+        <CreateDialog onClose={() => setShowCreateDialog(false)} />
       )}
     </AnimatePresence>
   );

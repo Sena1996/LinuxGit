@@ -120,6 +120,32 @@ body {
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: 'kern' 1, 'liga' 1;
+}
+
+/* Ensure crisp rendering for all elements */
+* {
+  text-rendering: optimizeLegibility;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+/* Prevent subpixel rendering issues for icons */
+svg {
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+}
+
+/* Keep photos smooth */
+img {
+  image-rendering: auto;
+}
+
+/* Force hardware acceleration for smoother rendering without blur */
+.transform-gpu {
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -145,45 +171,44 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   LIQUID GLASS COMPONENTS
+   CLEAN SOLID COMPONENTS - No blur effects for crisp UI
    ═══════════════════════════════════════════════════════════════ */
 
 @layer components {
   .glass-card {
-    background: linear-gradient(
-      135deg,
-      rgba(255, 255, 255, 0.08) 0%,
-      rgba(255, 255, 255, 0.04) 50%,
-      rgba(255, 255, 255, 0.02) 100%
-    );
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--bg-elevated);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.1),
-      0 8px 32px rgba(0, 0, 0, 0.3),
-      0 2px 8px rgba(0, 0, 0, 0.2);
-    border-radius: 16px;
+      0 4px 16px rgba(0, 0, 0, 0.3),
+      0 1px 4px rgba(0, 0, 0, 0.2);
+    border-radius: 12px;
   }
 
   .glass-card:hover {
-    background: linear-gradient(
-      135deg,
-      rgba(255, 255, 255, 0.12) 0%,
-      rgba(255, 255, 255, 0.06) 50%,
-      rgba(255, 255, 255, 0.03) 100%
-    );
+    background: var(--bg-hover);
+    border-color: rgba(255, 255, 255, 0.15);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.15),
-      0 12px 40px rgba(0, 0, 0, 0.35),
-      0 4px 12px rgba(0, 0, 0, 0.25);
+      0 6px 20px rgba(0, 0, 0, 0.35),
+      0 2px 6px rgba(0, 0, 0, 0.25);
+  }
+
+  /* Subtle card for nested elements */
+  .glass-card-subtle {
+    background: var(--bg-surface);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    border-radius: 8px;
+  }
+
+  .glass-card-subtle:hover {
+    background: var(--bg-elevated);
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
   }
 
   .glass-panel {
-    background: rgba(13, 13, 20, 0.8);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: var(--bg-surface);
+    border: 1px solid rgba(255, 255, 255, 0.08);
   }
 
   .glow-border {
@@ -260,3 +285,87 @@ body {
 .token-operator { color: #89ddff; }
 .token-variable { color: #f07178; }
 .token-class { color: #ffcb6b; }
+
+/* ═══════════════════════════════════════════════════════════════
+   DROPDOWN MENU - Shared styles for all dropdowns
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Base dropdown styles - shared between fixed and inline */
+.dropdown-base {
+  background-color: #1a1a24;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.5),
+    0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Fixed position dropdown (portal-based, used by Dropdown component) */
+.dropdown-menu {
+  position: fixed;
+  z-index: 9999;
+  background-color: #1a1a24;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.5),
+    0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Inline dropdown (positioned relative to parent) */
+.dropdown-inline {
+  position: absolute;
+  z-index: 50;
+  background-color: #1a1a24;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.5),
+    0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.dropdown-item {
+  background-color: #1a1a24;
+  transition: background-color 0.15s ease;
+}
+
+.dropdown-item:hover {
+  background-color: #252532;
+}
+
+.light .dropdown-menu,
+.light .dropdown-inline,
+.light .dropdown-menu > div,
+.light .dropdown-inline > div,
+.light .dropdown-item {
+  background-color: #ffffff;
+}
+
+.light .dropdown-item:hover {
+  background-color: #f0f0f5;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MODAL STYLING - Solid background for popups/dialogs
+   ═══════════════════════════════════════════════════════════════ */
+
+.modal-card {
+  background-color: var(--bg-elevated);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.6),
+    0 12px 32px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.light .modal-card {
+  background-color: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.15),
+    0 12px 32px rgba(0, 0, 0, 0.1);
+}

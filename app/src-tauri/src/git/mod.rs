@@ -3,6 +3,8 @@ pub mod status;
 pub mod commit;
 pub mod branch;
 pub mod diff;
+pub mod remote;
+pub mod clone;
 
 pub use repository::*;
 pub use status::*;
@@ -10,9 +12,14 @@ pub use commit::{
     create_commit, get_commit_history, get_commit_detail,
     cherry_pick_commit, revert_commit, reset_to_commit, checkout_commit,
     create_tag, get_commit_diff, ResetType,
+    // New commit operations
+    merge_commit, rebase_onto, interactive_rebase, delete_tag,
+    squash_commits, amend_commit_message, drop_commit,
 };
 pub use branch::*;
 pub use diff::*;
+pub use remote::*;
+pub use clone::*;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -39,6 +46,9 @@ pub enum GitError {
 
     #[error("Merge conflict detected")]
     MergeConflict,
+
+    #[error("{0}")]
+    Generic(String),
 
     #[error("Git2 error: {0}")]
     Git2(#[from] git2::Error),
@@ -115,6 +125,7 @@ pub struct BranchInfo {
     pub upstream: Option<String>,
     pub ahead: u32,
     pub behind: u32,
+    pub tip_sha: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

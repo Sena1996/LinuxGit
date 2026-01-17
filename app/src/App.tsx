@@ -1,10 +1,13 @@
 import { useEffect } from 'react';
 import { Sidebar, Header, StatusBar, CommandPalette } from '@/components/layout';
-import { ChangesView, HistoryView, BranchesView, SettingsView } from '@/views';
+import { ChangesView, HistoryView, BranchesView, GitHubView, SettingsView } from '@/views';
+import { WelcomeScreen } from '@/components/repository';
 import { useUIStore } from '@/stores/ui';
+import { useRepoStore } from '@/stores/repo';
 
 function App() {
   const { currentView, theme, commandPaletteOpen, setCommandPaletteOpen } = useUIStore();
+  const { repo } = useRepoStore();
 
   // Apply theme
   useEffect(() => {
@@ -77,6 +80,8 @@ function App() {
         return <HistoryView />;
       case 'branches':
         return <BranchesView />;
+      case 'github':
+        return <GitHubView />;
       case 'settings':
         return <SettingsView />;
       default:
@@ -84,19 +89,52 @@ function App() {
     }
   };
 
+  // Show welcome screen when no repository is open (unless in settings or github)
+  if (!repo && currentView !== 'settings' && currentView !== 'github') {
+    return (
+      <div className="h-screen flex flex-col bg-void text-text-primary overflow-hidden">
+        <Header />
+        <WelcomeScreen />
+        <StatusBar />
+        <CommandPalette />
+      </div>
+    );
+  }
+
+  // Show settings or github without sidebar when no repo is open
+  if (!repo && (currentView === 'settings' || currentView === 'github')) {
+    return (
+      <div className="h-screen flex flex-col bg-void text-text-primary overflow-hidden">
+        <Header />
+        <main className="flex-1 overflow-hidden bg-deep">
+          {currentView === 'settings' ? <SettingsView /> : <GitHubView />}
+        </main>
+        <StatusBar />
+        <CommandPalette />
+      </div>
+    );
+  }
+
   return (
     <div className="h-screen flex flex-col bg-void text-text-primary overflow-hidden">
       {/* Header */}
       <Header />
 
       {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden bg-void">
         {/* Sidebar */}
         <Sidebar />
 
         {/* Main View */}
-        <main className="flex-1 overflow-hidden bg-deep">
-          {renderView()}
+        <main className="flex-1 overflow-hidden p-3 pl-2">
+          <div className={[
+            'h-full rounded-xl overflow-hidden',
+            'bg-elevated',
+            'border border-white/[0.1]',
+            'shadow-lg'
+          ].join(' ')}>
+            {renderView()}
+          </div>
         </main>
       </div>
 

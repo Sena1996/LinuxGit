@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   GitBranch,
@@ -13,132 +13,108 @@ import {
   List,
   GitCommit,
   User,
-  Calendar,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useRepoStore, Branch } from '@/stores/repo';
-import { useBranches } from '@/hooks/useGit';
+import { useBranches, useCommits } from '@/hooks/useGit';
 import { BranchGraph } from '@/components/git/BranchGraph';
 
-// Mock commit data for list view
-const mockCommits = [
-  { sha: 'a1b2c3d4e5f6', shortSha: 'a1b2c3d', message: 'Merge feature/auth into main', author: 'John Doe', email: 'john@example.com', date: '1 hour ago', branch: 'main', isMerge: true },
-  { sha: 'b2c3d4e5f6g7', shortSha: 'b2c3d4e', message: 'Add responsive styles for mobile', author: 'Jane Smith', email: 'jane@example.com', date: '2 hours ago', branch: 'feature/ui', isMerge: false },
-  { sha: 'c3d4e5f6g7h8', shortSha: 'c3d4e5f', message: 'Update dependencies to latest versions', author: 'John Doe', email: 'john@example.com', date: '3 hours ago', branch: 'main', isMerge: false },
-  { sha: 'd4e5f6g7h8i9', shortSha: 'd4e5f6g', message: 'Implement dark mode toggle component', author: 'Jane Smith', email: 'jane@example.com', date: '4 hours ago', branch: 'feature/ui', isMerge: false },
-  { sha: 'e5f6g7h8i9j0', shortSha: 'e5f6g7h', message: 'Add JWT token validation middleware', author: 'Alex Johnson', email: 'alex@example.com', date: '5 hours ago', branch: 'feature/auth', isMerge: false },
-  { sha: 'f6g7h8i9j0k1', shortSha: 'f6g7h8i', message: 'Refactor API endpoints for consistency', author: 'John Doe', email: 'john@example.com', date: '6 hours ago', branch: 'main', isMerge: false },
-  { sha: 'g7h8i9j0k1l2', shortSha: 'g7h8i9j', message: 'Add login form with validation', author: 'Alex Johnson', email: 'alex@example.com', date: '1 day ago', branch: 'feature/auth', isMerge: false },
-  { sha: 'h8i9j0k1l2m3', shortSha: 'h8i9j0k', message: 'Create authentication service', author: 'Alex Johnson', email: 'alex@example.com', date: '1 day ago', branch: 'feature/auth', isMerge: false },
-  { sha: 'i9j0k1l2m3n4', shortSha: 'i9j0k1l', message: 'Add base UI components library', author: 'John Doe', email: 'john@example.com', date: '2 days ago', branch: 'main', isMerge: false },
-  { sha: 'j0k1l2m3n4o5', shortSha: 'j0k1l2m', message: 'Initial commit - project setup', author: 'John Doe', email: 'john@example.com', date: '3 days ago', branch: 'main', isMerge: false },
+// Branch colors for visualization
+const BRANCH_COLORS = [
+  '#00D9FF', // cyan - main
+  '#BD00FF', // purple
+  '#FF006B', // magenta
+  '#00FF94', // green
+  '#FFB800', // orange
 ];
 
-// Branch colors
-const BRANCH_COLORS: Record<string, string> = {
-  'main': '#00D9FF',
-  'feature/auth': '#BD00FF',
-  'feature/ui': '#FF006B',
-};
+// Commit list component using real data from store
+function CommitListPanel({
+  selectedBranch,
+  selectedCommit,
+  onSelectCommit
+}: {
+  selectedBranch: string | null;
+  selectedCommit: string | null;
+  onSelectCommit: (sha: string) => void;
+}) {
+  const { commits } = useRepoStore();
+  const { fetchCommits } = useCommits();
 
-function CommitListView({ selectedBranch }: { selectedBranch: string | null }) {
-  const [selectedCommit, setSelectedCommit] = useState<string | null>(null);
+  // Load commits on mount
+  useEffect(() => {
+    fetchCommits(100);
+  }, [fetchCommits]);
 
-  // Filter commits by branch if selected
-  const commits = selectedBranch
-    ? mockCommits.filter(c => c.branch === selectedBranch || c.branch === 'main')
-    : mockCommits;
+  // Show empty state if no commits
+  if (commits.length === 0) {
+    return (
+      <div className="h-full flex items-center justify-center p-4">
+        <div className="text-center">
+          <GitCommit size={40} className="mx-auto text-text-ghost mb-3" />
+          <p className="text-sm text-text-muted">No commits yet</p>
+          <p className="text-xs text-text-ghost mt-1">Make your first commit to see history</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="flex-1 flex flex-col min-h-0">
       {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-white/5">
+      <div className="flex items-center justify-between px-3 py-2 border-t border-white/5">
         <div className="flex items-center gap-2">
-          <GitCommit size={16} className="text-text-muted" />
-          <span className="text-sm font-medium text-text-primary">
+          <GitCommit size={14} className="text-text-muted" />
+          <span className="text-xs font-medium text-text-primary">
             {selectedBranch ? `Commits on ${selectedBranch}` : 'All Commits'}
           </span>
-          <span className="text-xs text-text-muted">({commits.length})</span>
+          <span className="text-[10px] text-text-muted">({commits.length})</span>
         </div>
       </div>
 
-      {/* Commit List */}
+      {/* Simple Commit List */}
       <div className="flex-1 overflow-y-auto">
-        {commits.map((commit) => {
-          const branchColor = BRANCH_COLORS[commit.branch] || '#888';
+        {commits.map((commit, index) => {
           const isSelected = selectedCommit === commit.sha;
+          const isMerge = commit.parents.length > 1;
+          const color = BRANCH_COLORS[index % BRANCH_COLORS.length];
 
           return (
             <div
               key={commit.sha}
-              onClick={() => setSelectedCommit(commit.sha)}
-              onDoubleClick={() => {/* Open action menu */}}
+              onClick={() => onSelectCommit(commit.sha)}
               className={cn(
-                'flex items-start gap-3 px-4 py-3 border-b border-white/5 cursor-pointer transition-colors',
+                'flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors border-b border-white/5',
                 isSelected ? 'bg-accent-primary/10' : 'hover:bg-hover'
               )}
-              data-context-menu
             >
-              {/* Branch indicator */}
-              <div className="flex flex-col items-center pt-1">
-                <div
-                  className="w-3 h-3 rounded-full"
-                  style={{ backgroundColor: branchColor }}
-                />
-                <div
-                  className="w-0.5 flex-1 mt-1"
-                  style={{ backgroundColor: `${branchColor}40` }}
-                />
-              </div>
+              {/* Commit indicator */}
+              <div
+                className="w-3 h-3 rounded-full flex-shrink-0"
+                style={{ backgroundColor: color }}
+              />
 
               {/* Commit info */}
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <p className="text-sm font-medium text-text-primary truncate">
-                    {commit.message}
-                  </p>
-                  {commit.isMerge && (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-accent-secondary/20 text-accent-secondary">
-                      MERGE
+                <p className="text-xs font-medium text-text-primary truncate">
+                  {commit.message}
+                </p>
+                <div className="flex items-center gap-2 mt-0.5 text-[10px] text-text-muted">
+                  <span className="truncate max-w-[100px]">{commit.author}</span>
+                  <span>•</span>
+                  <span>{commit.date}</span>
+                  {isMerge && (
+                    <span className="px-1 py-0.5 rounded text-[8px] font-medium bg-accent-secondary/20 text-accent-secondary">
+                      merge
                     </span>
                   )}
                 </div>
-
-                <div className="flex items-center gap-3 text-xs text-text-muted">
-                  <div className="flex items-center gap-1">
-                    <User size={12} />
-                    <span>{commit.author}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Calendar size={12} />
-                    <span>{commit.date}</span>
-                  </div>
-                  <code className="px-1.5 py-0.5 rounded bg-surface font-mono">
-                    {commit.shortSha}
-                  </code>
-                </div>
-
-                {/* Branch tag */}
-                <div className="mt-2">
-                  <span
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium"
-                    style={{ backgroundColor: `${branchColor}20`, color: branchColor }}
-                  >
-                    <GitBranch size={10} />
-                    {commit.branch}
-                  </span>
-                </div>
               </div>
 
-              {/* Actions on hover */}
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
-                  className="p-1.5 rounded hover:bg-surface text-text-muted hover:text-text-primary"
-                  title="View changes"
-                >
-                  <List size={14} />
-                </button>
-              </div>
+              {/* Short SHA */}
+              <code className="text-[10px] font-mono text-text-muted flex-shrink-0">
+                {commit.shortSha}
+              </code>
             </div>
           );
         })}
@@ -147,16 +123,94 @@ function CommitListView({ selectedBranch }: { selectedBranch: string | null }) {
   );
 }
 
-// Mock data for demonstration
-const mockBranches: Branch[] = [
-  { name: 'main', isRemote: false, isCurrent: true, upstream: 'origin/main', ahead: 0, behind: 0 },
-  { name: 'feature/auth', isRemote: false, isCurrent: false, upstream: 'origin/feature/auth', ahead: 2, behind: 0 },
-  { name: 'feature/ui-redesign', isRemote: false, isCurrent: false, ahead: 5, behind: 1 },
-  { name: 'bugfix/nav-issue', isRemote: false, isCurrent: false, ahead: 1, behind: 0 },
-  { name: 'origin/main', isRemote: true, isCurrent: false, ahead: 0, behind: 0 },
-  { name: 'origin/feature/auth', isRemote: true, isCurrent: false, ahead: 0, behind: 0 },
-  { name: 'origin/develop', isRemote: true, isCurrent: false, ahead: 0, behind: 0 },
-];
+// Commit details panel for the right side
+function CommitDetailsPanel({ selectedCommit }: { selectedCommit: string | null }) {
+  const { commits } = useRepoStore();
+  const selectedCommitData = selectedCommit
+    ? commits.find(c => c.sha === selectedCommit)
+    : null;
+
+  if (!selectedCommitData) {
+    return (
+      <div className="h-full flex items-center justify-center p-4">
+        <div className="text-center">
+          <GitCommit size={40} className="mx-auto text-text-ghost mb-3" />
+          <p className="text-sm text-text-muted">Select a commit</p>
+          <p className="text-xs text-text-ghost mt-1">to view details</p>
+        </div>
+      </div>
+    );
+  }
+
+  const isMerge = selectedCommitData.parents.length > 1;
+  const commitColor = BRANCH_COLORS[0]; // Use primary color
+
+  return (
+    <div className="h-full overflow-y-auto p-4">
+      <h3 className="text-sm font-medium text-text-secondary mb-3">
+        Commit Details
+      </h3>
+      <div className="glass-card p-4">
+        {/* Commit header */}
+        <div className="flex items-start gap-3 mb-4">
+          <div
+            className="w-10 h-10 rounded-full flex items-center justify-center"
+            style={{ backgroundColor: `${commitColor}20` }}
+          >
+            {isMerge ? (
+              <GitMerge size={20} style={{ color: commitColor }} />
+            ) : (
+              <GitCommit size={20} style={{ color: commitColor }} />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-text-primary">
+              {selectedCommitData.message}
+            </p>
+            <p className="text-xs text-text-muted mt-1">
+              {selectedCommitData.author} • {selectedCommitData.date}
+            </p>
+          </div>
+        </div>
+
+        {/* SHA */}
+        <div className="flex items-center gap-2 p-2 rounded-lg bg-surface mb-3">
+          <span className="text-xs text-text-muted">SHA:</span>
+          <code className="text-xs font-mono text-accent-primary">{selectedCommitData.sha}</code>
+        </div>
+
+        {/* Parents (for merge commits) */}
+        {isMerge && (
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-xs text-text-muted">Parents:</span>
+            <div className="flex gap-1">
+              {selectedCommitData.parents.map((parent, i) => (
+                <code key={i} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface text-text-muted">
+                  {parent.slice(0, 7)}
+                </code>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Author info */}
+        <div className="border-t border-white/5 pt-4">
+          <h4 className="text-xs font-medium text-text-secondary mb-2">Author</h4>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-accent-primary/20 flex items-center justify-center">
+              <User size={16} className="text-accent-primary" />
+            </div>
+            <div>
+              <p className="text-sm text-text-primary">{selectedCommitData.author}</p>
+              <p className="text-xs text-text-muted">{selectedCommitData.email}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 function BranchItem({ branch, isSelected, onSelect, onCheckout, onDelete, onMerge }: {
   branch: Branch;
@@ -299,8 +353,8 @@ function BranchSection({
 }
 
 export function BranchesView() {
-  const { branches: repoBranches } = useRepoStore();
-  const { checkoutBranch, deleteBranch, mergeBranch, createBranch } = useBranches();
+  const { branches: repoBranches, repo } = useRepoStore();
+  const { fetchBranches, checkoutBranch, deleteBranch, mergeBranch, createBranch } = useBranches();
   const [expandedSections, setExpandedSections] = useState({
     local: true,
     remote: true,
@@ -309,7 +363,15 @@ export function BranchesView() {
   const [newBranchName, setNewBranchName] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'graph'>('graph');
   const [selectedBranch, setSelectedBranch] = useState<string | null>(null);
+  const [selectedCommit, setSelectedCommit] = useState<string | null>(null);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  // Load branches when repo is available
+  useEffect(() => {
+    if (repo) {
+      fetchBranches();
+    }
+  }, [repo, fetchBranches]);
 
   // Show notification
   const showNotification = (message: string, type: 'success' | 'error') => {
@@ -358,27 +420,24 @@ export function BranchesView() {
     }
   };
 
-  // Use mock data if no real branches
-  const branches = repoBranches.length > 0 ? repoBranches : mockBranches;
-
-  const localBranches = branches.filter((b) => !b.isRemote);
-  const remoteBranches = branches.filter((b) => b.isRemote);
+  // Use real branches from the repository
+  const localBranches = repoBranches.filter((b) => !b.isRemote);
+  const remoteBranches = repoBranches.filter((b) => b.isRemote);
 
   const toggleSection = (section: 'local' | 'remote') => {
     setExpandedSections((prev) => ({ ...prev, [section]: !prev[section] }));
   };
 
   return (
-    <div className="h-full flex">
-      {/* Left Panel - Branch List */}
-      <div className="w-80 flex flex-col border-r border-white/5">
-        {/* Header */}
-        <div className="p-3 border-b border-white/5">
+    <div className="h-full flex flex-col">
+      {/* Header - Always visible */}
+      <div className="flex-shrink-0 p-3 border-b border-white/5">
+        <div className="glass-card p-3">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-medium text-text-primary">Branches</h2>
             <button
               onClick={() => setShowNewBranchModal(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-accent-primary/10 hover:bg-accent-primary/20 text-accent-primary text-xs font-medium transition-colors"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-accent-primary/20 hover:bg-accent-primary/30 text-accent-primary text-xs font-medium transition-colors"
             >
               <Plus size={14} />
               New
@@ -386,7 +445,7 @@ export function BranchesView() {
           </div>
 
           {/* View Mode Toggle */}
-          <div className="flex items-center gap-1 p-1 bg-surface rounded-lg">
+          <div className="flex items-center gap-1 p-1 bg-surface/50 rounded-lg">
             <button
               onClick={() => setViewMode('graph')}
               className={cn(
@@ -413,53 +472,106 @@ export function BranchesView() {
             </button>
           </div>
         </div>
-
-        {/* Branch List */}
-        <div className="flex-1 overflow-y-auto p-2">
-          <BranchSection
-            title="Local"
-            icon={<GitBranch size={14} />}
-            branches={localBranches}
-            isExpanded={expandedSections.local}
-            onToggle={() => toggleSection('local')}
-            selectedBranch={selectedBranch}
-            onSelectBranch={setSelectedBranch}
-            onCheckout={handleCheckout}
-            onDelete={handleDelete}
-            onMerge={handleMerge}
-          />
-
-          <BranchSection
-            title="Remote"
-            icon={<Cloud size={14} />}
-            branches={remoteBranches}
-            isExpanded={expandedSections.remote}
-            onToggle={() => toggleSection('remote')}
-            selectedBranch={selectedBranch}
-            onSelectBranch={setSelectedBranch}
-            onCheckout={handleCheckout}
-            onDelete={handleDelete}
-            onMerge={handleMerge}
-          />
-        </div>
       </div>
 
-      {/* Right Panel - Branch Visualization or List */}
-      <div className="flex-1 bg-void overflow-hidden">
+      {/* Main Content Area */}
+      <div className="flex-1 flex overflow-hidden">
         {viewMode === 'graph' ? (
-          <BranchGraph selectedBranch={selectedBranch} />
+          <>
+            {/* Graph Mode: Left panel with branches, right panel with graph */}
+            <div className="w-64 flex flex-col border-r border-white/5">
+              <div className="flex-1 overflow-y-auto p-2">
+                <BranchSection
+                  title="Local"
+                  icon={<GitBranch size={14} />}
+                  branches={localBranches}
+                  isExpanded={expandedSections.local}
+                  onToggle={() => toggleSection('local')}
+                  selectedBranch={selectedBranch}
+                  onSelectBranch={setSelectedBranch}
+                  onCheckout={handleCheckout}
+                  onDelete={handleDelete}
+                  onMerge={handleMerge}
+                />
+
+                <BranchSection
+                  title="Remote"
+                  icon={<Cloud size={14} />}
+                  branches={remoteBranches}
+                  isExpanded={expandedSections.remote}
+                  onToggle={() => toggleSection('remote')}
+                  selectedBranch={selectedBranch}
+                  onSelectBranch={setSelectedBranch}
+                  onCheckout={handleCheckout}
+                  onDelete={handleDelete}
+                  onMerge={handleMerge}
+                />
+              </div>
+            </div>
+
+            {/* Graph visualization */}
+            <div className="flex-1 bg-transparent overflow-hidden">
+              <BranchGraph selectedBranch={selectedBranch} />
+            </div>
+          </>
         ) : (
-          <CommitListView selectedBranch={selectedBranch} />
+          <>
+            {/* List Mode: Local/Remote on left, Commits in middle, Details on right */}
+            {/* Left: Local/Remote Branches */}
+            <div className="w-56 flex flex-col border-r border-white/5">
+              <div className="flex-1 overflow-y-auto p-2">
+                <BranchSection
+                  title="Local"
+                  icon={<GitBranch size={14} />}
+                  branches={localBranches}
+                  isExpanded={expandedSections.local}
+                  onToggle={() => toggleSection('local')}
+                  selectedBranch={selectedBranch}
+                  onSelectBranch={setSelectedBranch}
+                  onCheckout={handleCheckout}
+                  onDelete={handleDelete}
+                  onMerge={handleMerge}
+                />
+
+                <BranchSection
+                  title="Remote"
+                  icon={<Cloud size={14} />}
+                  branches={remoteBranches}
+                  isExpanded={expandedSections.remote}
+                  onToggle={() => toggleSection('remote')}
+                  selectedBranch={selectedBranch}
+                  onSelectBranch={setSelectedBranch}
+                  onCheckout={handleCheckout}
+                  onDelete={handleDelete}
+                  onMerge={handleMerge}
+                />
+              </div>
+            </div>
+
+            {/* Middle: Commits with SVG Graph */}
+            <div className="flex-1 border-r border-white/5">
+              <CommitListPanel
+                selectedBranch={selectedBranch}
+                selectedCommit={selectedCommit}
+                onSelectCommit={setSelectedCommit}
+              />
+            </div>
+
+            {/* Right: Commit Details */}
+            <div className="w-72 flex-shrink-0">
+              <CommitDetailsPanel selectedCommit={selectedCommit} />
+            </div>
+          </>
         )}
       </div>
 
       {/* New Branch Modal */}
       {showNewBranchModal && (
-        <div className="fixed inset-0 bg-void/60 backdrop-blur-sm flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-void/60  flex items-center justify-center z-50">
           <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
+            initial={{ opacity: 0, scale: 1 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="glass-card w-full max-w-md p-6"
+            className="modal-card w-full max-w-md p-6"
           >
             <h3 className="text-lg font-medium text-text-primary mb-4">Create New Branch</h3>
 

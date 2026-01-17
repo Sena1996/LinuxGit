@@ -336,6 +336,20 @@ export function useDiff() {
   return { diff, getFileDiff, loading, error };
 }
 
+// Types for AI operations
+export interface OllamaStatus {
+  available: boolean;
+  models: string[];
+}
+
+export interface AiConfig {
+  provider: 'ollama' | 'openai';
+  ollama_url: string;
+  ollama_model: string;
+  openai_api_key: string | null;
+  openai_model: string;
+}
+
 // Hook for AI operations
 export function useAI() {
   const [loading, setLoading] = useState(false);
@@ -356,5 +370,79 @@ export function useAI() {
     }
   }, []);
 
-  return { generateCommitMessage, loading, error };
+  const checkOllamaStatus = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const status = await invoke<OllamaStatus>('check_ollama_status');
+      return status;
+    } catch (e) {
+      const msg = getErrorMessage(e);
+      setError(msg);
+      throw new Error(msg);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const validateOpenAIKey = useCallback(async (apiKey: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const valid = await invoke<boolean>('validate_openai_key', { apiKey });
+      return valid;
+    } catch (e) {
+      const msg = getErrorMessage(e);
+      setError(msg);
+      throw new Error(msg);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const listOllamaModels = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const models = await invoke<string[]>('list_ollama_models');
+      return models;
+    } catch (e) {
+      const msg = getErrorMessage(e);
+      setError(msg);
+      throw new Error(msg);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const getAiConfig = useCallback(async () => {
+    try {
+      return await invoke<AiConfig>('get_ai_config');
+    } catch (e) {
+      const msg = getErrorMessage(e);
+      setError(msg);
+      throw new Error(msg);
+    }
+  }, []);
+
+  const setAiConfig = useCallback(async (config: AiConfig) => {
+    try {
+      await invoke('set_ai_config', { config });
+    } catch (e) {
+      const msg = getErrorMessage(e);
+      setError(msg);
+      throw new Error(msg);
+    }
+  }, []);
+
+  return {
+    generateCommitMessage,
+    checkOllamaStatus,
+    validateOpenAIKey,
+    listOllamaModels,
+    getAiConfig,
+    setAiConfig,
+    loading,
+    error,
+  };
 }

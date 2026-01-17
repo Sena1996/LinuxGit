@@ -24,6 +24,9 @@ pub fn get_branches(repo: &Repository) -> GitResult<Vec<BranchInfo>> {
 
         let (upstream, ahead, behind) = get_tracking_info(&branch);
 
+        // Get the tip commit SHA of this branch
+        let tip_sha = branch.get().target().map(|oid| oid.to_string());
+
         branches.push(BranchInfo {
             name,
             is_remote: false,
@@ -31,6 +34,7 @@ pub fn get_branches(repo: &Repository) -> GitResult<Vec<BranchInfo>> {
             upstream,
             ahead,
             behind,
+            tip_sha,
         });
     }
 
@@ -42,6 +46,8 @@ pub fn get_branches(repo: &Repository) -> GitResult<Vec<BranchInfo>> {
             .unwrap_or("unknown")
             .to_string();
 
+        let tip_sha = branch.get().target().map(|oid| oid.to_string());
+
         branches.push(BranchInfo {
             name,
             is_remote: true,
@@ -49,6 +55,7 @@ pub fn get_branches(repo: &Repository) -> GitResult<Vec<BranchInfo>> {
             upstream: None,
             ahead: 0,
             behind: 0,
+            tip_sha,
         });
     }
 
@@ -93,6 +100,7 @@ pub fn create_branch(repo: &Repository, name: &str, from_sha: Option<&str>) -> G
 
     let branch = repo.branch(name, &commit, false)?;
     let branch_name = branch.name()?.unwrap_or(name).to_string();
+    let tip_sha = branch.get().target().map(|oid| oid.to_string());
 
     Ok(BranchInfo {
         name: branch_name,
@@ -101,6 +109,7 @@ pub fn create_branch(repo: &Repository, name: &str, from_sha: Option<&str>) -> G
         upstream: None,
         ahead: 0,
         behind: 0,
+        tip_sha,
     })
 }
 

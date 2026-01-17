@@ -70,7 +70,7 @@ fn commit_to_info(commit: &git2::Commit) -> CommitInfo {
 
     let parents: Vec<String> = commit
         .parent_ids()
-        .map(|oid| oid.to_string().chars().take(7).collect())
+        .map(|oid| oid.to_string())
         .collect();
 
     CommitInfo {
@@ -219,6 +219,207 @@ pub fn create_tag(repo: &Repository, sha: &str, tag_name: &str, message: Option<
     };
 
     Ok(tag_oid.to_string())
+}
+
+/// Merges a commit into the current branch
+pub fn merge_commit(repo: &Repository, sha: &str) -> GitResult<CommitInfo> {
+    let oid = git2::Oid::from_str(sha).map_err(|_| GitError::CommitNotFound(sha.to_string()))?;
+    let commit = repo.find_commit(oid).map_err(|_| GitError::CommitNotFound(sha.to_string()))?;
+    let annotated_commit = repo.find_annotated_commit(oid)?;
+
+    // Perform merge analysis
+    let (analysis, _preference) = repo.merge_analysis(&[&annotated_commit])?;
+
+    if analysis.is_up_to_date() {
+        return Ok(commit_to_info(&commit));
+    }
+
+    if analysis.is_fast_forward() {
+        // Fast-forward merge
+        let refname = "HEAD";
+        let mut reference = repo.find_reference(refname)?;
+        reference.set_target(oid, &format!("Fast-forward to {}", sha))?;
+        repo.checkout_head(Some(git2::build::CheckoutBuilder::default().force()))?;
+        return Ok(commit_to_info(&commit));
+    }
+
+    // Normal merge
+    repo.merge(&[&annotated_commit], None, None)?;
+
+    // Check for conflicts
+    let index = repo.index()?;
+    if index.has_conflicts() {
+        return Err(GitError::MergeConflict);
+    }
+
+    // Create merge commit
+    let mut index = repo.index()?;
+    let tree_oid = index.write_tree()?;
+    let tree = repo.find_tree(tree_oid)?;
+
+    let sig = repo.signature()?;
+    let head = repo.head()?.peel_to_commit()?;
+
+    let merge_message = format!(
+        "Merge commit '{}' into {}",
+        &sha[..7.min(sha.len())],
+        repo.head()?.shorthand().unwrap_or("HEAD")
+    );
+
+    let new_oid = repo.commit(
+        Some("HEAD"),
+        &sig,
+        &sig,
+        &merge_message,
+        &tree,
+        &[&head, &commit],
+    )?;
+
+    repo.cleanup_state()?;
+
+    let new_commit = repo.find_commit(new_oid)?;
+    Ok(commit_to_info(&new_commit))
+}
+
+/// Rebases the current branch onto a specific commit
+pub fn rebase_onto(repo_path: &str, sha: &str) -> GitResult<()> {
+    use std::process::Command;
+
+    let output = Command::new("git")
+        .args(["rebase", sha])
+        .current_dir(repo_path)
+        .output()
+        .map_err(|e| GitError::Generic(format!("Failed to execute git rebase: {}", e)))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(GitError::Generic(format!("Rebase failed: {}", stderr)));
+    }
+
+    Ok(())
+}
+
+/// Starts an interactive rebase from a specific commit
+pub fn interactive_rebase(repo_path: &str, sha: &str) -> GitResult<()> {
+    use std::process::Command;
+
+    // For interactive rebase, we need to use git command with editor
+    // This will open the default editor for the user
+    let output = Command::new("git")
+        .args(["rebase", "-i", &format!("{}^", sha)])
+        .current_dir(repo_path)
+        .env("GIT_SEQUENCE_EDITOR", "true") // Non-interactive for now, just mark as started
+        .output()
+        .map_err(|e| GitError::Generic(format!("Failed to execute git rebase -i: {}", e)))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        // If it's just that we can't do interactive in non-tty, that's expected
+        if !stderr.contains("terminal") && !stderr.contains("tty") {
+            return Err(GitError::Generic(format!("Interactive rebase failed: {}", stderr)));
+        }
+    }
+
+    Ok(())
+}
+
+/// Deletes a tag
+pub fn delete_tag(repo: &Repository, tag_name: &str) -> GitResult<()> {
+    // First try to delete as lightweight tag
+    let refname = format!("refs/tags/{}", tag_name);
+
+    if let Ok(mut reference) = repo.find_reference(&refname) {
+        reference.delete()?;
+        return Ok(());
+    }
+
+    Err(GitError::Generic(format!("Tag '{}' not found", tag_name)))
+}
+
+/// Squashes a commit with its parent
+pub fn squash_commits(repo_path: &str, sha: &str) -> GitResult<()> {
+    use std::process::Command;
+
+    // Use git reset and commit to squash
+    // First, we need to do an interactive rebase with squash
+    let output = Command::new("git")
+        .args(["rebase", "-i", &format!("{}^^", sha)])
+        .current_dir(repo_path)
+        .env("GIT_SEQUENCE_EDITOR", &format!("sed -i '2s/pick/squash/'"))
+        .output()
+        .map_err(|e| GitError::Generic(format!("Failed to squash: {}", e)))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(GitError::Generic(format!("Squash failed: {}", stderr)));
+    }
+
+    Ok(())
+}
+
+/// Amends the message of the most recent commit (or specified commit via rebase)
+pub fn amend_commit_message(repo: &Repository, repo_path: &str, sha: &str, new_message: &str) -> GitResult<CommitInfo> {
+    let head = repo.head()?.peel_to_commit()?;
+    let head_sha = head.id().to_string();
+
+    // If amending HEAD, use git2 directly
+    if head_sha.starts_with(sha) || sha.starts_with(&head_sha[..7.min(head_sha.len())]) {
+        let tree = head.tree()?;
+        let sig = repo.signature()?;
+
+        let parents: Vec<git2::Commit> = head.parents().collect();
+        let parent_refs: Vec<&git2::Commit> = parents.iter().collect();
+
+        let new_oid = repo.commit(
+            Some("HEAD"),
+            &sig,
+            &head.author(),
+            new_message,
+            &tree,
+            &parent_refs,
+        )?;
+
+        let new_commit = repo.find_commit(new_oid)?;
+        return Ok(commit_to_info(&new_commit));
+    }
+
+    // For non-HEAD commits, use git rebase with reword
+    use std::process::Command;
+
+    let output = Command::new("git")
+        .args(["rebase", "-i", &format!("{}^", sha)])
+        .current_dir(repo_path)
+        .env("GIT_SEQUENCE_EDITOR", &format!("sed -i '1s/pick/reword/'"))
+        .env("GIT_EDITOR", &format!("echo '{}' >", new_message.replace("'", "'\\''")))
+        .output()
+        .map_err(|e| GitError::Generic(format!("Failed to amend message: {}", e)))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(GitError::Generic(format!("Amend failed: {}", stderr)));
+    }
+
+    // Return the current HEAD as the result
+    let new_head = repo.head()?.peel_to_commit()?;
+    Ok(commit_to_info(&new_head))
+}
+
+/// Drops a commit from history using rebase
+pub fn drop_commit(repo_path: &str, sha: &str) -> GitResult<()> {
+    use std::process::Command;
+
+    let output = Command::new("git")
+        .args(["rebase", "--onto", &format!("{}^", sha), sha])
+        .current_dir(repo_path)
+        .output()
+        .map_err(|e| GitError::Generic(format!("Failed to drop commit: {}", e)))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(GitError::Generic(format!("Drop commit failed: {}", stderr)));
+    }
+
+    Ok(())
 }
 
 /// Gets the diff for a specific commit

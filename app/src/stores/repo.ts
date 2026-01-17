@@ -25,6 +25,12 @@ export interface Branch {
   behind: number;
 }
 
+export interface RemoteInfo {
+  name: string;
+  url: string;
+  push_url?: string;
+}
+
 export interface RepoInfo {
   path: string;
   name: string;
@@ -53,6 +59,9 @@ interface RepoState {
   // Branches
   branches: Branch[];
 
+  // Remotes
+  remotes: RemoteInfo[];
+
   // Actions
   setRepo: (repo: RepoInfo | null) => void;
   clearRepo: () => void;
@@ -62,6 +71,7 @@ interface RepoState {
   setCommits: (commits: Commit[]) => void;
   selectCommit: (commit: Commit | null) => void;
   setBranches: (branches: Branch[]) => void;
+  setRemotes: (remotes: RemoteInfo[]) => void;
 }
 
 export const useRepoStore = create<RepoState>((set) => ({
@@ -74,6 +84,7 @@ export const useRepoStore = create<RepoState>((set) => ({
   commits: [],
   selectedCommit: null,
   branches: [],
+  remotes: [],
 
   setRepo: (repo) => set({ repo, error: null }),
   clearRepo: () => set({
@@ -83,7 +94,8 @@ export const useRepoStore = create<RepoState>((set) => ({
     untrackedFiles: [],
     commits: [],
     selectedCommit: null,
-    branches: []
+    branches: [],
+    remotes: [],
   }),
   setLoading: (isLoading) => set({ isLoading }),
   setError: (error) => set({ error, isLoading: false }),
@@ -92,4 +104,5 @@ export const useRepoStore = create<RepoState>((set) => ({
   setCommits: (commits) => set({ commits }),
   selectCommit: (selectedCommit) => set({ selectedCommit }),
   setBranches: (branches) => set({ branches }),
+  setRemotes: (remotes) => set({ remotes }),
 }));

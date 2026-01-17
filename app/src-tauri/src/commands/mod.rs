@@ -1,314 +1,180 @@
-use std::sync::Mutex;
-use tauri::State;
+mod state;
+mod git;
+mod github;
+mod ai;
 
-use crate::git::{self, BranchInfo, CommitInfo, FileDiff, RepoInfo, StatusInfo};
-use crate::ai::{self, AiConfig};
+pub use state::AppState;
 
-/// Global state for the current repository
-pub struct AppState {
-    pub repo_path: Mutex<Option<String>>,
-    pub ai_config: Mutex<AiConfig>,
-}
+pub use git::{
+    open_repository,
+    init_repository,
+    get_repository_info,
+    clone_repository,
+    scan_for_repos,
+    get_repo_sync_status,
+    get_git_config,
+    set_git_config,
+    get_ssh_keys,
+    get_status,
+    stage_files,
+    unstage_files,
+    discard_changes,
+    create_commit,
+    get_commits,
+    get_commit_detail,
+    cherry_pick_commit,
+    revert_commit,
+    reset_to_commit,
+    checkout_commit,
+    create_tag,
+    get_commit_diff,
+    // New commit operations
+    merge_commit,
+    rebase_onto,
+    interactive_rebase,
+    delete_tag,
+    squash_commits,
+    amend_commit_message,
+    drop_commit,
+    // Branch commands
+    get_branches,
+    create_branch,
+    checkout_branch,
+    delete_branch,
+    merge_branch,
+    get_file_diff,
+    get_remotes,
+    add_remote,
+    remove_remote,
+    fetch_remote,
+    fetch_all_remotes,
+    pull_remote,
+    push_remote,
+    list_repository_files,
+    list_workflow_files,
+    create_workflow_file,
+    read_workflow_file,
+    delete_workflow_file,
+    GitUserConfig,
+    SshKeyInfo,
+};
 
-impl Default for AppState {
-    fn default() -> Self {
-        Self {
-            repo_path: Mutex::new(None),
-            ai_config: Mutex::new(AiConfig::default()),
-        }
-    }
-}
+pub use ai::{
+    generate_commit_message,
+    get_ai_config,
+    set_ai_config,
+    check_ollama_status,
+    validate_openai_key,
+    list_ollama_models,
+    OllamaStatus,
+};
 
-// ============================================================================
-// Repository Commands
-// ============================================================================
-
-#[tauri::command]
-pub fn open_repository(path: String, state: State<AppState>) -> Result<RepoInfo, String> {
-    let repo = git::open_repo(&path).map_err(|e| e.to_string())?;
-    let info = git::get_repo_info(&repo).map_err(|e| e.to_string())?;
-
-    *state.repo_path.lock().unwrap() = Some(path);
-
-    Ok(info)
-}
-
-#[tauri::command]
-pub fn init_repository(path: String, state: State<AppState>) -> Result<RepoInfo, String> {
-    let repo = git::init_repo(&path).map_err(|e| e.to_string())?;
-    let info = git::get_repo_info(&repo).map_err(|e| e.to_string())?;
-
-    *state.repo_path.lock().unwrap() = Some(path);
-
-    Ok(info)
-}
-
-#[tauri::command]
-pub fn get_repository_info(state: State<AppState>) -> Result<RepoInfo, String> {
-    let path_guard = state.repo_path.lock().unwrap();
-    let path = path_guard
-        .as_ref()
-        .ok_or("No repository open")?;
-
-    let repo = git::open_repo(path).map_err(|e| e.to_string())?;
-    git::get_repo_info(&repo).map_err(|e| e.to_string())
-}
-
-// ============================================================================
-// Status Commands
-// ============================================================================
-
-#[tauri::command]
-pub fn get_status(state: State<AppState>) -> Result<StatusInfo, String> {
-    let path_guard = state.repo_path.lock().unwrap();
-    let path = path_guard
-        .as_ref()
-        .ok_or("No repository open")?;
-
-    let repo = git::open_repo(path).map_err(|e| e.to_string())?;
-    git::get_repo_status(&repo).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn stage_files(paths: Vec<String>, state: State<AppState>) -> Result<(), String> {
-    let path_guard = state.repo_path.lock().unwrap();
-    let repo_path = path_guard
-        .as_ref()
-        .ok_or("No repository open")?;
-
-    let repo = git::open_repo(repo_path).map_err(|e| e.to_string())?;
-    git::stage_files(&repo, &paths).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn unstage_files(paths: Vec<String>, state: State<AppState>) -> Result<(), String> {
-    let path_guard = state.repo_path.lock().unwrap();
-    let repo_path = path_guard
-        .as_ref()
-        .ok_or("No repository open")?;
-
-    let repo = git::open_repo(repo_path).map_err(|e| e.to_string())?;
-    git::unstage_files(&repo, &paths).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn discard_changes(paths: Vec<String>, state: State<AppState>) -> Result<(), String> {
-    let path_guard = state.repo_path.lock().unwrap();
-    let repo_path = path_guard
-        .as_ref()
-        .ok_or("No repository open")?;
-
-    let repo = git::open_repo(repo_path).map_err(|e| e.to_string())?;
-    git::discard_changes(&repo, &paths).map_err(|e| e.to_string())
-}
-
-// ============================================================================
-// Commit Commands
-// ============================================================================
-
-#[tauri::command]
-pub fn create_commit(message: String, state: State<AppState>) -> Result<CommitInfo, String> {
-    let path_guard = state.repo_path.lock().unwrap();
-    let repo_path = path_guard
-        .as_ref()
-        .ok_or("No repository open")?;
-
-    let repo = git::open_repo(repo_path).map_err(|e| e.to_string())?;
-    git::create_commit(&repo, &message).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn get_commits(limit: Option<usize>, skip: Option<usize>, state: State<AppState>) -> Result<Vec<CommitInfo>, String> {
-    let path_guard = state.repo_path.lock().unwrap();
-    let repo_path = path_guard
-        .as_ref()
-        .ok_or("No repository open")?;
-
-    let repo = git::open_repo(repo_path).map_err(|e| e.to_string())?;
-    git::get_commit_history(&repo, limit.unwrap_or(100), skip.unwrap_or(0)).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn get_commit_detail(sha: String, state: State<AppState>) -> Result<CommitInfo, String> {
-    let path_guard = state.repo_path.lock().unwrap();
-    let repo_path = path_guard
-        .as_ref()
-        .ok_or("No repository open")?;
-
-    let repo = git::open_repo(repo_path).map_err(|e| e.to_string())?;
-    git::get_commit_detail(&repo, &sha).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn cherry_pick_commit(sha: String, state: State<AppState>) -> Result<CommitInfo, String> {
-    let path_guard = state.repo_path.lock().unwrap();
-    let repo_path = path_guard
-        .as_ref()
-        .ok_or("No repository open")?;
-
-    let repo = git::open_repo(repo_path).map_err(|e| e.to_string())?;
-    git::cherry_pick_commit(&repo, &sha).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn revert_commit(sha: String, state: State<AppState>) -> Result<CommitInfo, String> {
-    let path_guard = state.repo_path.lock().unwrap();
-    let repo_path = path_guard
-        .as_ref()
-        .ok_or("No repository open")?;
-
-    let repo = git::open_repo(repo_path).map_err(|e| e.to_string())?;
-    git::revert_commit(&repo, &sha).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn reset_to_commit(sha: String, reset_type: String, state: State<AppState>) -> Result<(), String> {
-    let path_guard = state.repo_path.lock().unwrap();
-    let repo_path = path_guard
-        .as_ref()
-        .ok_or("No repository open")?;
-
-    let reset = match reset_type.as_str() {
-        "soft" => git::ResetType::Soft,
-        "mixed" => git::ResetType::Mixed,
-        "hard" => git::ResetType::Hard,
-        _ => return Err("Invalid reset type. Use 'soft', 'mixed', or 'hard'".to_string()),
-    };
-
-    let repo = git::open_repo(repo_path).map_err(|e| e.to_string())?;
-    git::reset_to_commit(&repo, &sha, reset).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn checkout_commit(sha: String, state: State<AppState>) -> Result<(), String> {
-    let path_guard = state.repo_path.lock().unwrap();
-    let repo_path = path_guard
-        .as_ref()
-        .ok_or("No repository open")?;
-
-    let repo = git::open_repo(repo_path).map_err(|e| e.to_string())?;
-    git::checkout_commit(&repo, &sha).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn create_tag(sha: String, tag_name: String, message: Option<String>, state: State<AppState>) -> Result<String, String> {
-    let path_guard = state.repo_path.lock().unwrap();
-    let repo_path = path_guard
-        .as_ref()
-        .ok_or("No repository open")?;
-
-    let repo = git::open_repo(repo_path).map_err(|e| e.to_string())?;
-    git::create_tag(&repo, &sha, &tag_name, message.as_deref()).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn get_commit_diff(sha: String, state: State<AppState>) -> Result<Vec<FileDiff>, String> {
-    let path_guard = state.repo_path.lock().unwrap();
-    let repo_path = path_guard
-        .as_ref()
-        .ok_or("No repository open")?;
-
-    let repo = git::open_repo(repo_path).map_err(|e| e.to_string())?;
-    git::get_commit_diff(&repo, &sha).map_err(|e| e.to_string())
-}
-
-// ============================================================================
-// Branch Commands
-// ============================================================================
-
-#[tauri::command]
-pub fn get_branches(state: State<AppState>) -> Result<Vec<BranchInfo>, String> {
-    let path_guard = state.repo_path.lock().unwrap();
-    let repo_path = path_guard
-        .as_ref()
-        .ok_or("No repository open")?;
-
-    let repo = git::open_repo(repo_path).map_err(|e| e.to_string())?;
-    git::get_branches(&repo).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn create_branch(name: String, from_sha: Option<String>, state: State<AppState>) -> Result<BranchInfo, String> {
-    let path_guard = state.repo_path.lock().unwrap();
-    let repo_path = path_guard
-        .as_ref()
-        .ok_or("No repository open")?;
-
-    let repo = git::open_repo(repo_path).map_err(|e| e.to_string())?;
-    git::create_branch(&repo, &name, from_sha.as_deref()).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn checkout_branch(name: String, state: State<AppState>) -> Result<(), String> {
-    let path_guard = state.repo_path.lock().unwrap();
-    let repo_path = path_guard
-        .as_ref()
-        .ok_or("No repository open")?;
-
-    let repo = git::open_repo(repo_path).map_err(|e| e.to_string())?;
-    git::checkout_branch(&repo, &name).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn delete_branch(name: String, force: Option<bool>, state: State<AppState>) -> Result<(), String> {
-    let path_guard = state.repo_path.lock().unwrap();
-    let repo_path = path_guard
-        .as_ref()
-        .ok_or("No repository open")?;
-
-    let repo = git::open_repo(repo_path).map_err(|e| e.to_string())?;
-    git::delete_branch(&repo, &name, force.unwrap_or(false)).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn merge_branch(name: String, state: State<AppState>) -> Result<(), String> {
-    let path_guard = state.repo_path.lock().unwrap();
-    let repo_path = path_guard
-        .as_ref()
-        .ok_or("No repository open")?;
-
-    let repo = git::open_repo(repo_path).map_err(|e| e.to_string())?;
-    git::merge_branch(&repo, &name).map_err(|e| e.to_string())
-}
-
-// ============================================================================
-// Diff Commands
-// ============================================================================
-
-#[tauri::command]
-pub fn get_file_diff(path: String, staged: bool, state: State<AppState>) -> Result<FileDiff, String> {
-    let path_guard = state.repo_path.lock().unwrap();
-    let repo_path = path_guard
-        .as_ref()
-        .ok_or("No repository open")?;
-
-    let repo = git::open_repo(repo_path).map_err(|e| e.to_string())?;
-    git::get_file_diff(&repo, &path, staged).map_err(|e| e.to_string())
-}
-
-// ============================================================================
-// AI Commands
-// ============================================================================
-
-#[tauri::command]
-pub async fn generate_commit_message(state: State<'_, AppState>) -> Result<String, String> {
-    let repo_path = {
-        let path_guard = state.repo_path.lock().unwrap();
-        path_guard
-            .as_ref()
-            .ok_or("No repository open")?
-            .clone()
-    };
-
-    let repo = git::open_repo(&repo_path).map_err(|e| e.to_string())?;
-    let diff = git::get_staged_diff_text(&repo).map_err(|e| e.to_string())?;
-
-    if diff.is_empty() {
-        return Err("No staged changes to generate commit message from".to_string());
-    }
-
-    let config = state.ai_config.lock().unwrap().clone();
-    ai::generate_commit_message(&diff, &config)
-        .await
-        .map_err(|e| e.to_string())
-}
+pub use github::{
+    github_login,
+    github_auth_status,
+    github_logout,
+    github_get_user,
+    github_get_repos,
+    github_get_token,
+    github_list_workflows,
+    github_list_workflow_runs,
+    github_get_workflow_run,
+    github_get_workflow_run_jobs,
+    github_get_workflow_run_logs,
+    github_trigger_workflow,
+    github_cancel_workflow_run,
+    github_rerun_workflow,
+    github_rerun_failed_jobs,
+    github_list_run_artifacts,
+    github_list_repo_artifacts,
+    github_get_artifact_download_url,
+    github_delete_artifact,
+    github_delete_workflow_run,
+    github_list_releases,
+    github_get_release,
+    github_get_latest_release,
+    github_get_release_by_tag,
+    github_create_release,
+    github_update_release,
+    github_delete_release,
+    github_generate_release_notes,
+    github_list_release_assets,
+    github_delete_release_asset,
+    github_list_tags,
+    github_get_pages_info,
+    github_enable_pages,
+    github_update_pages,
+    github_disable_pages,
+    github_list_pages_builds,
+    github_get_latest_pages_build,
+    github_request_pages_build,
+    github_get_deployment_status,
+    github_list_notifications,
+    github_list_repo_notifications,
+    github_mark_all_notifications_read,
+    github_mark_repo_notifications_read,
+    github_get_thread,
+    github_mark_thread_read,
+    github_mark_thread_done,
+    github_get_thread_subscription,
+    github_set_thread_subscription,
+    github_delete_thread_subscription,
+    github_get_unread_count,
+    github_get_contributors,
+    github_get_commit_activity,
+    github_get_code_frequency,
+    github_get_participation,
+    github_get_punch_card,
+    github_get_traffic_views,
+    github_get_traffic_clones,
+    github_get_top_referrers,
+    github_get_popular_paths,
+    github_get_community_profile,
+    github_get_languages,
+    github_list_pull_requests,
+    github_get_pull_request,
+    github_create_pull_request,
+    github_update_pull_request,
+    github_merge_pull_request,
+    github_list_pr_reviews,
+    github_list_pr_comments,
+    github_request_reviewers,
+    github_create_review,
+    github_list_issues,
+    github_get_issue,
+    github_create_issue,
+    github_update_issue,
+    github_list_issue_comments,
+    github_create_issue_comment,
+    github_list_labels,
+    github_list_milestones,
+    github_add_labels_to_issue,
+    github_lock_issue,
+    github_unlock_issue,
+    // Deployments
+    github_list_deployments,
+    github_get_deployment,
+    github_create_deployment,
+    github_delete_deployment,
+    github_list_deployment_statuses,
+    github_create_deployment_status,
+    github_get_deployment_summary,
+    // Environments
+    github_list_environments,
+    github_get_environment,
+    github_create_environment,
+    github_update_environment,
+    github_delete_environment,
+    github_list_environment_secrets,
+    github_list_environment_variables,
+    github_list_branch_policies,
+    github_create_branch_policy,
+    github_delete_branch_policy,
+    // Security
+    github_list_dependabot_alerts,
+    github_list_code_scanning_alerts,
+    github_list_secret_scanning_alerts,
+    github_dismiss_dependabot_alert,
+    github_dismiss_code_scanning_alert,
+    github_resolve_secret_scanning_alert,
+};

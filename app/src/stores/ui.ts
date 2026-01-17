@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 export type Theme = 'dark' | 'light' | 'system';
-export type View = 'changes' | 'history' | 'branches' | 'settings';
+export type View = 'changes' | 'history' | 'branches' | 'github' | 'settings';
 
 interface UIState {
   // Theme

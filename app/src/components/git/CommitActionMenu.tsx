@@ -3,12 +3,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   GitBranch,
   GitCommit,
-  GitMerge,
   Copy,
   Eye,
   RotateCcw,
   Tag,
-  Trash2,
   ChevronRight,
   ChevronsUp,
   FileCode,
@@ -16,9 +14,23 @@ import {
   History,
   AlertTriangle,
   X,
-  Check,
+  Loader2,
+  ChevronDown,
+  ChevronUp,
+  FileText,
+  FilePlus,
+  FileX,
+  FileEdit,
+  GitMerge,
+  FolderTree,
+  MessageSquare,
+  Trash2,
+  Combine,
+  PenLine,
+  ArrowUpToLine,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { invoke } from '@tauri-apps/api/core';
 
 // Types
 interface CommitInfo {
@@ -29,6 +41,7 @@ interface CommitInfo {
   date: string;
   branch: string;
   color: string;
+  tags?: string[];
 }
 
 interface CommitActionMenuProps {
@@ -40,21 +53,36 @@ interface CommitActionMenuProps {
 }
 
 export type CommitAction =
+  // Core Actions
   | 'view-changes'
+  | 'copy-sha'
+  | 'copy-message'
+  // Branch Operations
+  | 'create-branch'
+  | 'checkout'
+  | 'merge-into-current'
+  // History Rewriting
   | 'cherry-pick'
   | 'revert'
   | 'reset-soft'
   | 'reset-mixed'
   | 'reset-hard'
-  | 'create-branch'
+  | 'rebase-onto'
+  | 'interactive-rebase'
+  // Tags
   | 'create-tag'
-  | 'checkout'
-  | 'copy-sha'
-  | 'compare'
-  | 'rebase';
+  | 'delete-tag'
+  // Compare & Inspect
+  | 'compare-with-head'
+  | 'compare-with'
+  | 'browse-files'
+  // Advanced
+  | 'squash-with-parent'
+  | 'edit-message'
+  | 'drop-commit';
 
 interface MenuItem {
-  id: CommitAction | 'reset' | 'divider';
+  id: CommitAction | 'reset' | 'rebase' | 'tags' | 'compare' | 'advanced' | 'divider' | 'group-label';
   label: string;
   icon?: React.ReactNode;
   shortcut?: string;
@@ -64,6 +92,7 @@ interface MenuItem {
 }
 
 const menuItems: MenuItem[] = [
+  // === CORE ACTIONS ===
   {
     id: 'view-changes',
     label: 'View Changes',
@@ -72,12 +101,56 @@ const menuItems: MenuItem[] = [
     description: 'View diff for this commit',
   },
   {
-    id: 'compare',
-    label: 'Compare with...',
-    icon: <GitCompare size={14} />,
-    description: 'Compare with another commit',
+    id: 'browse-files',
+    label: 'Browse Files',
+    icon: <FolderTree size={14} />,
+    description: 'View file tree at this commit',
   },
   { id: 'divider', label: '' },
+
+  // === COMPARE & INSPECT ===
+  {
+    id: 'compare',
+    label: 'Compare',
+    icon: <GitCompare size={14} />,
+    submenu: [
+      {
+        id: 'compare-with-head',
+        label: 'Compare with HEAD',
+        description: 'Diff between this and current',
+      },
+      {
+        id: 'compare-with',
+        label: 'Compare with...',
+        description: 'Select another commit to compare',
+      },
+    ],
+  },
+  { id: 'divider', label: '' },
+
+  // === BRANCH OPERATIONS ===
+  {
+    id: 'create-branch',
+    label: 'Create Branch Here',
+    icon: <GitBranch size={14} />,
+    shortcut: 'B',
+    description: 'Start a new branch at this commit',
+  },
+  {
+    id: 'checkout',
+    label: 'Checkout Commit',
+    icon: <GitCommit size={14} />,
+    description: 'Switch to this commit (detached HEAD)',
+  },
+  {
+    id: 'merge-into-current',
+    label: 'Merge into Current Branch',
+    icon: <GitMerge size={14} />,
+    description: 'Merge this commit into current branch',
+  },
+  { id: 'divider', label: '' },
+
+  // === HISTORY REWRITING ===
   {
     id: 'cherry-pick',
     label: 'Cherry-pick Commit',
@@ -90,10 +163,9 @@ const menuItems: MenuItem[] = [
     icon: <RotateCcw size={14} />,
     description: 'Create a commit that undoes changes',
   },
-  { id: 'divider', label: '' },
   {
     id: 'reset',
-    label: 'Reset Current Branch to Here',
+    label: 'Reset Branch to Here',
     icon: <History size={14} />,
     submenu: [
       {
@@ -116,37 +188,86 @@ const menuItems: MenuItem[] = [
   },
   {
     id: 'rebase',
-    label: 'Interactive Rebase from Here',
-    icon: <FileCode size={14} />,
-    description: 'Edit commit history from this point',
+    label: 'Rebase',
+    icon: <ArrowUpToLine size={14} />,
+    submenu: [
+      {
+        id: 'rebase-onto',
+        label: 'Rebase onto This Commit',
+        description: 'Rebase current branch onto here',
+      },
+      {
+        id: 'interactive-rebase',
+        label: 'Interactive Rebase from Here',
+        description: 'Edit commit history from this point',
+      },
+    ],
   },
   { id: 'divider', label: '' },
+
+  // === TAGS ===
   {
-    id: 'create-branch',
-    label: 'Create Branch from Here',
-    icon: <GitBranch size={14} />,
-    shortcut: 'B',
-    description: 'Start a new branch at this commit',
-  },
-  {
-    id: 'create-tag',
-    label: 'Create Tag',
+    id: 'tags',
+    label: 'Tags',
     icon: <Tag size={14} />,
-    shortcut: 'T',
-    description: 'Tag this commit',
-  },
-  {
-    id: 'checkout',
-    label: 'Checkout Commit',
-    icon: <GitCommit size={14} />,
-    description: 'Switch to this commit (detached HEAD)',
+    submenu: [
+      {
+        id: 'create-tag',
+        label: 'Create Tag',
+        shortcut: 'T',
+        description: 'Tag this commit',
+      },
+      {
+        id: 'delete-tag',
+        label: 'Delete Tag',
+        danger: true,
+        description: 'Remove tag from this commit',
+      },
+    ],
   },
   { id: 'divider', label: '' },
+
+  // === ADVANCED ===
+  {
+    id: 'advanced',
+    label: 'Advanced',
+    icon: <FileCode size={14} />,
+    submenu: [
+      {
+        id: 'squash-with-parent',
+        label: 'Squash with Parent',
+        icon: <Combine size={14} />,
+        description: 'Combine with previous commit',
+      },
+      {
+        id: 'edit-message',
+        label: 'Edit Commit Message',
+        icon: <PenLine size={14} />,
+        description: 'Amend the commit message',
+      },
+      {
+        id: 'drop-commit',
+        label: 'Drop Commit',
+        icon: <Trash2 size={14} />,
+        danger: true,
+        description: 'Remove commit from history',
+      },
+    ],
+  },
+  { id: 'divider', label: '' },
+
+  // === COPY ACTIONS ===
   {
     id: 'copy-sha',
     label: 'Copy Commit SHA',
     icon: <Copy size={14} />,
     shortcut: 'C',
+  },
+  {
+    id: 'copy-message',
+    label: 'Copy Commit Message',
+    icon: <MessageSquare size={14} />,
+    shortcut: 'M',
   },
 ];
 
@@ -200,7 +321,7 @@ function MenuItemComponent({
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -10 }}
-            className="absolute left-full top-0 ml-1 w-48 glass-card p-1 z-10"
+            className="dropdown-inline left-full top-0 ml-1 w-48 p-1"
             onMouseEnter={() => onSubmenuHover(item.id)}
             onMouseLeave={() => onSubmenuHover(null)}
           >
@@ -231,16 +352,52 @@ function MenuItemComponent({
 export function CommitActionMenu({
   commit,
   position,
-  currentBranch,
+  currentBranch: _currentBranch,
   onClose,
   onAction,
 }: CommitActionMenuProps) {
   const [activeSubmenu, setActiveSubmenu] = useState<string | null>(null);
+  const [adjustedPosition, setAdjustedPosition] = useState(position);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const handleAction = (action: CommitAction) => {
     onAction(action);
   };
+
+  // Adjust position to stay within viewport
+  useEffect(() => {
+    if (menuRef.current) {
+      const menu = menuRef.current;
+      const rect = menu.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const padding = 8;
+
+      let newX = position.x;
+      let newY = position.y;
+
+      // Check right overflow
+      if (position.x + rect.width > viewportWidth - padding) {
+        newX = viewportWidth - rect.width - padding;
+      }
+
+      // Check left overflow
+      if (newX < padding) {
+        newX = padding;
+      }
+
+      // Check bottom overflow - show above cursor if not enough space below
+      if (position.y + rect.height > viewportHeight - padding) {
+        newY = position.y - rect.height - padding;
+        // If still overflows top, just align to top
+        if (newY < padding) {
+          newY = padding;
+        }
+      }
+
+      setAdjustedPosition({ x: newX, y: newY });
+    }
+  }, [position]);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -272,13 +429,13 @@ export function CommitActionMenu({
       {/* Menu */}
       <motion.div
         ref={menuRef}
-        initial={{ opacity: 0, scale: 0.95, y: -10 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: -10 }}
-        className="fixed z-50 w-64 glass-card p-1"
+        initial={{ opacity: 0, scale: 1 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 1 }}
+        className="w-64 dropdown-menu p-1"
         style={{
-          left: Math.min(position.x, window.innerWidth - 280),
-          top: Math.min(position.y, window.innerHeight - 400),
+          left: adjustedPosition.x,
+          top: adjustedPosition.y,
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -333,11 +490,11 @@ export function ConfirmDialog({
   onCancel,
 }: ConfirmDialogProps) {
   return (
-    <div className="fixed inset-0 bg-void/60 backdrop-blur-sm flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-void/60  flex items-center justify-center z-50">
       <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
+        initial={{ opacity: 0, scale: 1 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="glass-card w-full max-w-md p-6"
+        className="modal-card w-full max-w-md p-6"
       >
         <div className="flex items-start gap-4 mb-4">
           {danger && (
@@ -396,11 +553,11 @@ export function InputDialog({
   const [value, setValue] = useState('');
 
   return (
-    <div className="fixed inset-0 bg-void/60 backdrop-blur-sm flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-void/60  flex items-center justify-center z-50">
       <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
+        initial={{ opacity: 0, scale: 1 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="glass-card w-full max-w-md p-6"
+        className="modal-card w-full max-w-md p-6"
       >
         <div className="flex items-center gap-3 mb-4">
           <div className="p-2 rounded-full bg-accent-primary/20 text-accent-primary">
@@ -447,6 +604,164 @@ export function InputDialog({
   );
 }
 
+// Types for diff data from backend
+interface DiffLine {
+  line_type: 'context' | 'addition' | 'deletion' | 'header';
+  content: string;
+  old_line: number | null;
+  new_line: number | null;
+}
+
+interface DiffHunk {
+  header: string;
+  old_start: number;
+  old_lines: number;
+  new_start: number;
+  new_lines: number;
+  lines: DiffLine[];
+}
+
+interface FileDiff {
+  path: string;
+  old_path: string | null;
+  status: 'Added' | 'Modified' | 'Deleted' | 'Renamed' | 'Untracked' | 'Conflict';
+  hunks: DiffHunk[];
+  is_binary: boolean;
+  additions: number;
+  deletions: number;
+}
+
+// File status icon component
+function FileStatusIcon({ status }: { status: FileDiff['status'] }) {
+  switch (status) {
+    case 'Added':
+      return <FilePlus size={16} className="text-status-added" />;
+    case 'Deleted':
+      return <FileX size={16} className="text-status-deleted" />;
+    case 'Modified':
+      return <FileEdit size={16} className="text-status-modified" />;
+    case 'Renamed':
+      return <FileText size={16} className="text-accent-primary" />;
+    default:
+      return <FileCode size={16} className="text-text-muted" />;
+  }
+}
+
+// File diff item component
+function FileDiffItem({ file, defaultExpanded = true }: { file: FileDiff; defaultExpanded?: boolean }) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+
+  return (
+    <div className="mb-4 border border-white/5 rounded-lg overflow-hidden">
+      {/* File header */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-3 px-4 py-2 bg-elevated hover:bg-hover transition-colors text-left"
+      >
+        {expanded ? (
+          <ChevronDown size={16} className="text-text-muted" />
+        ) : (
+          <ChevronUp size={16} className="text-text-muted" />
+        )}
+        <FileStatusIcon status={file.status} />
+        <span className="flex-1 text-sm font-medium text-text-primary truncate">
+          {file.old_path && file.status === 'Renamed' ? (
+            <>
+              <span className="text-text-muted">{file.old_path}</span>
+              <span className="text-text-ghost mx-2">→</span>
+              {file.path}
+            </>
+          ) : (
+            file.path
+          )}
+        </span>
+        <span className="text-xs px-1.5 py-0.5 rounded bg-status-added/20 text-status-added">
+          +{file.additions}
+        </span>
+        <span className="text-xs px-1.5 py-0.5 rounded bg-status-deleted/20 text-status-deleted">
+          -{file.deletions}
+        </span>
+      </button>
+
+      {/* File content */}
+      <AnimatePresence>
+        {expanded && (
+          <motion.div
+            initial={{ height: 0 }}
+            animate={{ height: 'auto' }}
+            exit={{ height: 0 }}
+            className="overflow-hidden"
+          >
+            {file.is_binary ? (
+              <div className="px-4 py-8 text-center text-text-muted text-sm bg-surface">
+                Binary file not shown
+              </div>
+            ) : file.hunks.length === 0 ? (
+              <div className="px-4 py-8 text-center text-text-muted text-sm bg-surface">
+                No changes to display
+              </div>
+            ) : (
+              <div className="bg-surface font-mono text-xs overflow-x-auto">
+                {file.hunks.map((hunk, hunkIndex) => (
+                  <div key={hunkIndex}>
+                    {/* Hunk header */}
+                    <div className="px-4 py-1.5 bg-accent-primary/10 text-accent-primary border-y border-white/5 sticky top-0">
+                      {hunk.header}
+                    </div>
+                    {/* Hunk lines */}
+                    {hunk.lines.map((line, lineIndex) => (
+                      <div
+                        key={lineIndex}
+                        className={cn(
+                          'flex',
+                          line.line_type === 'addition' && 'bg-status-added/10',
+                          line.line_type === 'deletion' && 'bg-status-deleted/10'
+                        )}
+                      >
+                        {/* Line numbers */}
+                        <div className="flex-shrink-0 w-20 flex text-text-ghost select-none border-r border-white/5">
+                          <span className="w-10 px-2 py-0.5 text-right">
+                            {line.old_line || ''}
+                          </span>
+                          <span className="w-10 px-2 py-0.5 text-right">
+                            {line.new_line || ''}
+                          </span>
+                        </div>
+                        {/* Line indicator */}
+                        <span
+                          className={cn(
+                            'flex-shrink-0 w-6 text-center py-0.5 select-none',
+                            line.line_type === 'addition' && 'text-status-added',
+                            line.line_type === 'deletion' && 'text-status-deleted',
+                            line.line_type === 'context' && 'text-text-ghost'
+                          )}
+                        >
+                          {line.line_type === 'addition' ? '+' : line.line_type === 'deletion' ? '-' : ' '}
+                        </span>
+                        {/* Line content */}
+                        <pre
+                          className={cn(
+                            'flex-1 py-0.5 pr-4 whitespace-pre',
+                            line.line_type === 'addition' && 'text-status-added',
+                            line.line_type === 'deletion' && 'text-status-deleted',
+                            line.line_type === 'context' && 'text-text-secondary'
+                          )}
+                        >
+                          {line.content}
+                        </pre>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 // Diff Viewer Modal
 interface DiffViewerModalProps {
   commit: CommitInfo;
@@ -454,50 +769,53 @@ interface DiffViewerModalProps {
 }
 
 export function DiffViewerModal({ commit, onClose }: DiffViewerModalProps) {
-  // This would fetch actual diff data from backend
-  const mockDiff = {
-    files: [
-      {
-        path: 'src/components/Button.tsx',
-        status: 'modified' as const,
-        additions: 12,
-        deletions: 5,
-        hunks: [
-          {
-            header: '@@ -10,7 +10,14 @@',
-            lines: [
-              { type: 'context' as const, content: 'import { cn } from "@/lib/utils";' },
-              { type: 'deletion' as const, content: 'const Button = ({ children }) => {' },
-              { type: 'addition' as const, content: 'interface ButtonProps {' },
-              { type: 'addition' as const, content: '  children: React.ReactNode;' },
-              { type: 'addition' as const, content: '  variant?: "primary" | "secondary";' },
-              { type: 'addition' as const, content: '}' },
-              { type: 'addition' as const, content: '' },
-              { type: 'addition' as const, content: 'const Button = ({ children, variant = "primary" }: ButtonProps) => {' },
-              { type: 'context' as const, content: '  return (' },
-            ],
-          },
-        ],
-      },
-    ],
-  };
+  const [files, setFiles] = useState<FileDiff[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadDiff() {
+      try {
+        setLoading(true);
+        setError(null);
+        const diffData = await invoke<FileDiff[]>('get_commit_diff', { sha: commit.sha });
+        setFiles(diffData);
+      } catch (e) {
+        setError(String(e));
+        console.error('Failed to load diff:', e);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadDiff();
+  }, [commit.sha]);
+
+  // Calculate totals
+  const totals = files.reduce(
+    (acc, file) => ({
+      additions: acc.additions + file.additions,
+      deletions: acc.deletions + file.deletions,
+    }),
+    { additions: 0, deletions: 0 }
+  );
 
   return (
-    <div className="fixed inset-0 bg-void/80 backdrop-blur-sm flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-void/80  flex items-center justify-center z-50 p-4">
       <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
+        initial={{ opacity: 0, scale: 1 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="glass-card w-full max-w-4xl max-h-[80vh] flex flex-col"
+        className="modal-card w-full max-w-5xl max-h-[90vh] flex flex-col"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-white/10">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between p-4 border-b border-white/10 flex-shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
             <div
-              className="w-3 h-3 rounded-full"
+              className="w-3 h-3 rounded-full flex-shrink-0"
               style={{ backgroundColor: commit.color }}
             />
-            <div>
-              <p className="text-sm font-medium text-text-primary">{commit.message}</p>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-text-primary truncate">{commit.message}</p>
               <p className="text-xs text-text-muted">
                 <code className="font-mono">{commit.shortSha}</code> • {commit.author} • {commit.date}
               </p>
@@ -505,50 +823,50 @@ export function DiffViewerModal({ commit, onClose }: DiffViewerModalProps) {
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-hover text-text-muted hover:text-text-primary transition-colors"
+            className="p-2 rounded-lg hover:bg-hover text-text-muted hover:text-text-primary transition-colors flex-shrink-0 ml-4"
           >
             <X size={20} />
           </button>
         </div>
 
-        {/* File List */}
-        <div className="flex-1 overflow-auto p-4">
-          {mockDiff.files.map((file) => (
-            <div key={file.path} className="mb-4">
-              <div className="flex items-center gap-3 mb-2">
-                <FileCode size={16} className="text-text-muted" />
-                <span className="text-sm font-medium text-text-primary">{file.path}</span>
-                <span className="text-xs text-status-added">+{file.additions}</span>
-                <span className="text-xs text-status-deleted">-{file.deletions}</span>
-              </div>
+        {/* Stats bar */}
+        {!loading && !error && files.length > 0 && (
+          <div className="flex items-center gap-4 px-4 py-2 bg-elevated border-b border-white/5 text-sm flex-shrink-0">
+            <span className="text-text-muted">
+              {files.length} {files.length === 1 ? 'file' : 'files'} changed
+            </span>
+            <span className="text-status-added">+{totals.additions}</span>
+            <span className="text-status-deleted">-{totals.deletions}</span>
+          </div>
+        )}
 
-              <div className="bg-surface rounded-lg overflow-hidden font-mono text-xs">
-                {file.hunks.map((hunk, hunkIndex) => (
-                  <div key={hunkIndex}>
-                    <div className="px-4 py-1 bg-accent-primary/10 text-accent-primary">
-                      {hunk.header}
-                    </div>
-                    {hunk.lines.map((line, lineIndex) => (
-                      <div
-                        key={lineIndex}
-                        className={cn(
-                          'px-4 py-0.5',
-                          line.type === 'addition' && 'bg-status-added/10 text-status-added',
-                          line.type === 'deletion' && 'bg-status-deleted/10 text-status-deleted',
-                          line.type === 'context' && 'text-text-secondary'
-                        )}
-                      >
-                        <span className="inline-block w-4 select-none opacity-50">
-                          {line.type === 'addition' ? '+' : line.type === 'deletion' ? '-' : ' '}
-                        </span>
-                        {line.content}
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
+        {/* Content */}
+        <div className="flex-1 overflow-auto p-4">
+          {loading ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 size={32} className="animate-spin text-accent-primary" />
+              <span className="ml-3 text-text-muted">Loading diff...</span>
             </div>
-          ))}
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <AlertTriangle size={48} className="text-status-deleted mb-4" />
+              <p className="text-text-primary font-medium">Failed to load diff</p>
+              <p className="text-sm text-text-muted mt-1">{error}</p>
+            </div>
+          ) : files.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <FileCode size={48} className="text-text-ghost mb-4" />
+              <p className="text-text-muted">No changes in this commit</p>
+            </div>
+          ) : (
+            files.map((file, index) => (
+              <FileDiffItem
+                key={`${file.path}-${index}`}
+                file={file}
+                defaultExpanded={files.length <= 5}
+              />
+            ))
+          )}
         </div>
       </motion.div>
     </div>
