@@ -22,12 +22,14 @@ import { useUIStore } from '@/stores/ui';
 import { useRepoStore } from '@/stores/repo';
 import { useRepositoriesStore } from '@/stores/repositories';
 import { RepositoryManager } from '@/components/repository';
-import { Dropdown, DropdownItem, DropdownDivider, DropdownLabel } from '@/components/ui';
+import { Dropdown, DropdownItem, DropdownDivider, DropdownLabel, Badge } from '@/components/ui';
+import { useNotifications } from '@/hooks/useNotifications';
 
 export function Header() {
   const { openCommandPalette, currentView, setView } = useUIStore();
   const { repo, setRepo, setLoading, setError } = useRepoStore();
   const { recentRepositories, addRecentRepository } = useRepositoriesStore();
+  const { counts, needsPull, needsPush } = useNotifications();
   const [pulling, setPulling] = useState(false);
   const [pushing, setPushing] = useState(false);
   const [fetching, setFetching] = useState(false);
@@ -262,35 +264,45 @@ export function Header() {
         <div className="w-px h-6 bg-white/5" />
 
         {/* Git Actions */}
-        <button
-          onClick={handlePull}
-          disabled={!repo || pulling}
-          className={cn(
-            'flex items-center gap-2 px-3 py-1.5 rounded-lg',
-            'text-sm font-medium transition-colors duration-200',
-            repo
-              ? 'bg-accent-primary/10 hover:bg-accent-primary/20 text-accent-primary'
-              : 'bg-elevated text-text-muted cursor-not-allowed'
-          )}
-        >
-          {pulling ? <Loader2 size={16} className="animate-spin" /> : <ArrowDown size={16} />}
-          Pull
-        </button>
+        <div className="relative">
+          <button
+            onClick={handlePull}
+            disabled={!repo || pulling}
+            className={cn(
+              'flex items-center gap-2 px-3 py-1.5 rounded-lg',
+              'text-sm font-medium transition-colors duration-200',
+              repo
+                ? needsPull
+                  ? 'bg-status-modified/20 hover:bg-status-modified/30 text-status-modified'
+                  : 'bg-accent-primary/10 hover:bg-accent-primary/20 text-accent-primary'
+                : 'bg-elevated text-text-muted cursor-not-allowed'
+            )}
+          >
+            {pulling ? <Loader2 size={16} className="animate-spin" /> : <ArrowDown size={16} />}
+            Pull
+          </button>
+          <Badge count={counts.pullAvailable} variant="warning" />
+        </div>
 
-        <button
-          onClick={handlePush}
-          disabled={!repo || pushing}
-          className={cn(
-            'flex items-center gap-2 px-3 py-1.5 rounded-lg',
-            'text-sm font-medium transition-colors duration-200',
-            repo
-              ? 'bg-elevated hover:bg-hover text-text-secondary hover:text-text-primary'
-              : 'bg-elevated text-text-muted cursor-not-allowed'
-          )}
-        >
-          {pushing ? <Loader2 size={16} className="animate-spin" /> : <ArrowUp size={16} />}
-          Push
-        </button>
+        <div className="relative">
+          <button
+            onClick={handlePush}
+            disabled={!repo || pushing}
+            className={cn(
+              'flex items-center gap-2 px-3 py-1.5 rounded-lg',
+              'text-sm font-medium transition-colors duration-200',
+              repo
+                ? needsPush
+                  ? 'bg-status-added/20 hover:bg-status-added/30 text-status-added'
+                  : 'bg-elevated hover:bg-hover text-text-secondary hover:text-text-primary'
+                : 'bg-elevated text-text-muted cursor-not-allowed'
+            )}
+          >
+            {pushing ? <Loader2 size={16} className="animate-spin" /> : <ArrowUp size={16} />}
+            Push
+          </button>
+          <Badge count={counts.pushAvailable} variant="success" />
+        </div>
 
         <button
           onClick={handleFetch}
@@ -339,20 +351,25 @@ export function Header() {
         </button>
 
         {/* GitHub Button */}
-        <button
-          onClick={() => setView('github')}
-          className={cn(
-            'flex items-center gap-2 px-3 py-1.5 rounded-lg',
-            'text-sm font-medium transition-colors duration-200',
-            currentView === 'github'
-              ? 'bg-accent-primary/20 text-accent-primary'
-              : 'bg-elevated hover:bg-hover text-text-secondary hover:text-text-primary'
-          )}
-          title="GitHub Features"
-        >
-          <Github size={16} />
-          <span className="hidden sm:inline">GitHub</span>
-        </button>
+        <div className="relative">
+          <button
+            onClick={() => setView('github')}
+            className={cn(
+              'flex items-center gap-2 px-3 py-1.5 rounded-lg',
+              'text-sm font-medium transition-colors duration-200',
+              currentView === 'github'
+                ? 'bg-accent-primary/20 text-accent-primary'
+                : counts.gitHubTotal > 0
+                  ? 'bg-accent-primary/10 hover:bg-accent-primary/20 text-accent-primary'
+                  : 'bg-elevated hover:bg-hover text-text-secondary hover:text-text-primary'
+            )}
+            title="GitHub Features"
+          >
+            <Github size={16} />
+            <span className="hidden sm:inline">GitHub</span>
+          </button>
+          <Badge count={counts.gitHubTotal} variant="primary" />
+        </div>
 
         <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-accent-secondary/10">
           <Sparkles size={14} className="text-accent-secondary" />

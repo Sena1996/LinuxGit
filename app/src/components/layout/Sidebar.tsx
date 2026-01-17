@@ -12,6 +12,8 @@ import {
 import { cn } from '@/lib/utils';
 import { useUIStore, View } from '@/stores/ui';
 import { useRepoStore } from '@/stores/repo';
+import { InlineBadge } from '@/components/ui';
+import { useNotifications } from '@/hooks/useNotifications';
 
 interface NavItem {
   id: View;
@@ -29,6 +31,31 @@ const navItems: NavItem[] = [
 export function Sidebar() {
   const { currentView, setView, sidebarCollapsed, toggleSidebar } = useUIStore();
   const { repo } = useRepoStore();
+  const { counts } = useNotifications();
+
+  // Get badge count for each nav item
+  const getBadgeCount = (id: View): number => {
+    switch (id) {
+      case 'changes':
+        return counts.totalChanges;
+      case 'github':
+        return counts.gitHubTotal;
+      default:
+        return 0;
+    }
+  };
+
+  // Get badge variant for each nav item
+  const getBadgeVariant = (id: View): 'primary' | 'success' | 'warning' | 'danger' | 'muted' => {
+    switch (id) {
+      case 'changes':
+        return counts.stagedChanges > 0 ? 'success' : 'warning';
+      case 'github':
+        return counts.failedCIRuns > 0 ? 'danger' : 'primary';
+      default:
+        return 'muted';
+    }
+  };
 
   return (
     <div className="h-full p-3 pr-0 relative group/sidebar">
@@ -70,29 +97,50 @@ export function Sidebar() {
 
         {/* Navigation */}
         <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setView(item.id)}
-              className={cn(
-                'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200',
-                currentView === item.id
-                  ? 'bg-accent-primary/20 text-accent-primary shadow-lg shadow-accent-primary/10 border border-accent-primary/20'
-                  : 'text-text-secondary hover:text-text-primary hover:bg-white/5'
-              )}
-            >
-              <span className="flex-shrink-0">{item.icon}</span>
-              {!sidebarCollapsed && (
-                <motion.span
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="text-sm font-medium"
-                >
-                  {item.label}
-                </motion.span>
-              )}
-            </button>
-          ))}
+          {navItems.map((item) => {
+            const badgeCount = getBadgeCount(item.id);
+            const badgeVariant = getBadgeVariant(item.id);
+
+            return (
+              <button
+                key={item.id}
+                onClick={() => setView(item.id)}
+                className={cn(
+                  'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 relative',
+                  currentView === item.id
+                    ? 'bg-accent-primary/20 text-accent-primary shadow-lg shadow-accent-primary/10 border border-accent-primary/20'
+                    : 'text-text-secondary hover:text-text-primary hover:bg-white/5'
+                )}
+              >
+                <span className="flex-shrink-0 relative">
+                  {item.icon}
+                  {/* Show dot indicator when collapsed and has notifications */}
+                  {sidebarCollapsed && badgeCount > 0 && (
+                    <span className={cn(
+                      'absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full',
+                      badgeVariant === 'success' && 'bg-status-added',
+                      badgeVariant === 'warning' && 'bg-status-modified',
+                      badgeVariant === 'danger' && 'bg-status-deleted',
+                      badgeVariant === 'primary' && 'bg-accent-primary',
+                      badgeVariant === 'muted' && 'bg-text-muted'
+                    )} />
+                  )}
+                </span>
+                {!sidebarCollapsed && (
+                  <>
+                    <motion.span
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="text-sm font-medium"
+                    >
+                      {item.label}
+                    </motion.span>
+                    <InlineBadge count={badgeCount} variant={badgeVariant} />
+                  </>
+                )}
+              </button>
+            );
+          })}
         </nav>
 
         {/* Settings */}

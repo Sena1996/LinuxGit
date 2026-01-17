@@ -147,7 +147,7 @@ function CloneContent({ onSuccess, initialUrl = '', initialName = '' }: { onSucc
           )}
         />
         {url && !isValidUrl(url) && (
-          <p className="text-xs text-status-warning flex items-center gap-1">
+          <p className="text-xs text-status-modified flex items-center gap-1">
             <AlertCircle size={12} /> Enter a valid Git URL
           </p>
         )}
@@ -298,7 +298,7 @@ function CreateContent({ onSuccess }: { onSuccess: () => void }) {
           )}
         />
         {repoName && !isValidName(repoName) && (
-          <p className="text-xs text-status-warning flex items-center gap-1">
+          <p className="text-xs text-status-modified flex items-center gap-1">
             <AlertCircle size={12} /> Use only letters, numbers, hyphens, and underscores
           </p>
         )}
@@ -531,7 +531,7 @@ function GitHubContent({ onClone }: { onClone: (url: string, name: string) => vo
               >
                 <div className="p-2 rounded-lg bg-elevated flex-shrink-0">
                   {repo.private ? (
-                    <Lock size={18} className="text-status-warning" />
+                    <Lock size={18} className="text-status-modified" />
                   ) : (
                     <Globe size={18} className="text-text-muted" />
                   )}
@@ -540,7 +540,7 @@ function GitHubContent({ onClone }: { onClone: (url: string, name: string) => vo
                   <div className="flex items-center gap-2 mb-1">
                     <p className="text-sm font-medium text-text-primary truncate">{repo.name}</p>
                     {repo.private && (
-                      <span className="px-1.5 py-0.5 rounded text-xs bg-status-warning/10 text-status-warning">
+                      <span className="px-1.5 py-0.5 rounded text-xs bg-status-modified/10 text-status-modified">
                         Private
                       </span>
                     )}

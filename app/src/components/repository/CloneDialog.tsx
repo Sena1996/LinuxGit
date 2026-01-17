@@ -183,7 +183,7 @@ export function CloneDialog({ onClose, initialUrl = '' }: CloneDialogProps) {
               )}
             />
             {url && !isValidUrl(url) && (
-              <p className="text-xs text-status-warning flex items-center gap-1">
+              <p className="text-xs text-status-modified flex items-center gap-1">
                 <AlertCircle size={12} />
                 Enter a valid Git URL (https://, git@, ssh://, or git://)
               </p>

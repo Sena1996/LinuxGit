@@ -162,7 +162,7 @@ export function CreateDialog({ onClose }: CreateDialogProps) {
               )}
             />
             {repoName && !isValidName(repoName) && (
-              <p className="text-xs text-status-warning flex items-center gap-1">
+              <p className="text-xs text-status-modified flex items-center gap-1">
                 <AlertCircle size={12} />
                 Use only letters, numbers, hyphens, and underscores
               </p>

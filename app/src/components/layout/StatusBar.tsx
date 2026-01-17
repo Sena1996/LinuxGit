@@ -1,44 +1,11 @@
-import { useState, useEffect } from 'react';
-import { GitBranch, Cloud, CheckCircle, AlertCircle, Loader2, ArrowUp, ArrowDown } from 'lucide-react';
-import { invoke } from '@tauri-apps/api/core';
+import { GitBranch, Cloud, CheckCircle, AlertCircle, Loader2, ArrowUp, ArrowDown, CircleDot, XCircle, PlayCircle } from 'lucide-react';
 import { useRepoStore } from '@/stores/repo';
 import { cn } from '@/lib/utils';
-
-interface SyncStatus {
-  ahead: number;
-  behind: number;
-  remote_name: string | null;
-  upstream_branch: string | null;
-}
+import { useNotifications } from '@/hooks/useNotifications';
 
 export function StatusBar() {
-  const { repo, stagedFiles, unstagedFiles, isLoading, error } = useRepoStore();
-  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
-
-  const totalChanges = stagedFiles.length + unstagedFiles.length;
-
-  // Fetch sync status when repo changes
-  useEffect(() => {
-    async function fetchSyncStatus() {
-      if (!repo) {
-        setSyncStatus(null);
-        return;
-      }
-
-      try {
-        const status = await invoke<SyncStatus>('get_repo_sync_status');
-        setSyncStatus(status);
-      } catch (e) {
-        // Silently fail if no upstream configured
-        setSyncStatus(null);
-      }
-    }
-
-    fetchSyncStatus();
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchSyncStatus, 30000);
-    return () => clearInterval(interval);
-  }, [repo]);
+  const { repo, isLoading, error } = useRepoStore();
+  const { syncStatus, latestCIStatus, counts } = useNotifications();
 
   return (
     <footer className="px-3 pb-3 bg-void">
@@ -65,7 +32,7 @@ export function StatusBar() {
                 <ArrowUp size={10} />
                 {syncStatus.ahead}
               </span>
-              <span className={cn('flex items-center gap-0.5', syncStatus.behind > 0 && 'text-status-warning')}>
+              <span className={cn('flex items-center gap-0.5', syncStatus.behind > 0 && 'text-status-modified')}>
                 <ArrowDown size={10} />
                 {syncStatus.behind}
               </span>
@@ -74,17 +41,50 @@ export function StatusBar() {
         )}
 
         {/* Changes Count */}
-        {totalChanges > 0 && (
+        {counts.totalChanges > 0 && (
           <div className="flex items-center gap-1.5">
-            <span className="text-status-modified">{stagedFiles.length} staged</span>
+            <span className="text-status-modified">{counts.stagedChanges} staged</span>
             <span className="text-text-ghost">•</span>
-            <span className="text-text-secondary">{unstagedFiles.length} changes</span>
+            <span className="text-text-secondary">{counts.unstagedChanges} changes</span>
           </div>
         )}
       </div>
 
-      {/* Right: Status Indicator */}
-      <div className="flex items-center gap-2">
+      {/* Right: CI Status & Status Indicator */}
+      <div className="flex items-center gap-4">
+        {/* CI Status */}
+        {latestCIStatus && (
+          <a
+            href={latestCIStatus.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={cn(
+              'flex items-center gap-1.5 hover:underline cursor-pointer',
+              latestCIStatus.inProgress && 'text-accent-primary',
+              latestCIStatus.failed && 'text-status-deleted',
+              !latestCIStatus.inProgress && !latestCIStatus.failed && 'text-status-added'
+            )}
+          >
+            {latestCIStatus.inProgress ? (
+              <PlayCircle size={12} className="animate-pulse" />
+            ) : latestCIStatus.failed ? (
+              <XCircle size={12} />
+            ) : (
+              <CircleDot size={12} />
+            )}
+            <span className="max-w-[120px] truncate">{latestCIStatus.name}</span>
+          </a>
+        )}
+
+        {/* Failed CI Runs Count */}
+        {counts.failedCIRuns > 0 && (
+          <div className="flex items-center gap-1 text-status-deleted">
+            <XCircle size={12} />
+            <span>{counts.failedCIRuns} failed</span>
+          </div>
+        )}
+
+        {/* App Status Indicator */}
         {isLoading && (
           <div className="flex items-center gap-1.5 text-accent-primary">
             <Loader2 size={12} className="animate-spin" />
@@ -95,7 +95,7 @@ export function StatusBar() {
         {error && (
           <div className="flex items-center gap-1.5 text-status-deleted">
             <AlertCircle size={12} />
-            <span>{error}</span>
+            <span className="max-w-[150px] truncate">{error}</span>
           </div>
         )}
 

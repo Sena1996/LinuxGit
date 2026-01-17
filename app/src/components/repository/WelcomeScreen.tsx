@@ -321,7 +321,7 @@ export function WelcomeScreen() {
                   >
                     <div className="p-2 rounded-lg bg-elevated">
                       {repo.private ? (
-                        <Lock size={18} className="text-status-warning" />
+                        <Lock size={18} className="text-status-modified" />
                       ) : (
                         <Globe size={18} className="text-text-muted" />
                       )}
@@ -330,7 +330,7 @@ export function WelcomeScreen() {
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium text-text-primary truncate">{repo.name}</p>
                         {repo.private && (
-                          <span className="px-1.5 py-0.5 rounded text-xs bg-status-warning/10 text-status-warning">
+                          <span className="px-1.5 py-0.5 rounded text-xs bg-status-modified/10 text-status-modified">
                             Private
                           </span>
                         )}
